@@ -9,7 +9,7 @@ import { site } from "@/data/site";
 
 const marqueeItems = [
   site.name,
-  "Producción bajo pedido",
+  "Entregas En 48 Horas",
   "Hecho en El Salvador",
   "Drops exclusivos",
   "Calidad premium",
@@ -24,7 +24,7 @@ export default function HomePage() {
 
       <DropsSection />
 
-      {/* Producción bajo pedido — brand story */}
+      {/* Entregas En 48 Horas — brand story */}
       <section className="py-16 md:py-24">
         <Container>
           <Reveal>
@@ -32,7 +32,7 @@ export default function HomePage() {
               <div>
                 <p className="eyebrow mb-3">Por qué CYMT</p>
                 <h2 className="text-balance text-3xl font-bold leading-tight md:text-4xl">
-                  Producción bajo pedido, sin compromisos.
+                  Entregas En 48 Horas.
                 </h2>
                 <p className="mt-4 text-ink-muted">
                   No fabricamos en serie. Cada pieza se produce cuando la pides, con materiales
@@ -40,9 +40,9 @@ export default function HomePage() {
                 </p>
               </div>
               <div className="grid gap-6 sm:grid-cols-3 md:col-span-2">
-                <Pillar index="01" title="Bajo pedido" text="Fabricamos tu pieza solo cuando la ordenas. Cero desperdicio, máxima calidad." />
+                <Pillar index="01" title="Tu Eleccion" text="Fabricamos tu pieza solo cuando la ordenas. Cero desperdicio, máxima calidad." />
                 <Pillar index="02" title="Calidad premium" text="Materiales pesados, costuras reforzadas y estampados que resisten." />
-                <Pillar index="03" title="Hecho en El Salvador" text="Diseñado y producido localmente, con orgullo chapín." />
+                <Pillar index="03" title="Hecho en El Salvador" text="Diseñado y producido localmente." />
               </div>
             </div>
           </Reveal>

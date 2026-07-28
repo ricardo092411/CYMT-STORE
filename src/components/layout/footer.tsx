@@ -67,7 +67,7 @@ export function Footer() {
             </a>
             <Link href="/tienda" className="footer-link">Guía de tallas</Link>
             <span className="footer-link cursor-default">Envíos a todo El Salvador</span>
-            <span className="footer-link cursor-default">Producción bajo pedido</span>
+            <span className="footer-link cursor-default">Entregas En 48 Horas</span>
           </FooterCol>
 
           {/* Marca */}
@@ -104,7 +104,7 @@ export function Footer() {
       <div className="border-t border-line">
         <div className="container-x flex flex-col items-center justify-between gap-2 py-5 text-center text-xs text-ink-faint sm:flex-row sm:text-left">
           <p>© {new Date().getFullYear()} {site.legalName} · {site.city}, {site.country} · Todos los derechos reservados.</p>
-          <p className="uppercase tracking-[0.16em]">Producción bajo pedido</p>
+          <p className="uppercase tracking-[0.16em]">Producción Alta Calidad</p>
         </div>
       </div>
     </footer>

@@ -10,9 +10,9 @@ export const site = {
   name: "CYMT STORE",
   legalName: "CYMT Store",
   shortName: "CYMT",
-  tagline: "Streetwear premium bajo pedido",
+  tagline: "Streetwear Unicos",
   description:
-    "CYMT STORE — Streetwear premium producido bajo pedido en El Salvador. Drops exclusivos de Anime, Rock, Naturaleza y Retro. Calidad, diseño y producción bajo demanda.",
+    "CYMT STORE — Streetwear premium. Drops exclusivos de Anime, Rock, Naturaleza, Retro y Mas.",
   url: "https://cymtstore.com",
   locale: "es-SV",
   country: "El Salvador",
@@ -60,11 +60,11 @@ export const site = {
 
   /** Made-to-order promise shown across the experience. */
   productionNote:
-    "Producción bajo pedido. La fabricación inicia una vez confirmado el pago por transferencia bancaria.",
+    "Entregas En 48 Horas. La fabricación inicia una vez confirmado el pago por transferencia bancaria.",
 
   /** Rotating announcement bar messages. */
   announcements: [
-    "✨ PRODUCCIÓN BAJO PEDIDO — Calidad premium hecha para ti",
+    "✨ PRODUCCIÓN Al Detalle — Calidad premium hecha para ti",
     "🚚 ENVÍOS A TODO EL SALVADOR",
     "🔥 NUEVO DROP DISPONIBLE — DROP ANIME & DROP RETRO",
     "🖤 ÚNETE AL CLUB CYMT — Acceso a drops exclusivos",

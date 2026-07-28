@@ -34,7 +34,7 @@ export function HomeProductSections() {
       <ProductShowcase
         eyebrow="Selección"
         title="Destacados"
-        description="Las piezas que definen el lenguaje de CYMT. Calidad premium bajo pedido."
+        description="Las piezas que definen el lenguaje de CYMT. Calidad premium."
         products={featured}
         priorityCount={4}
       />

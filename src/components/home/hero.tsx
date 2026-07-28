@@ -25,14 +25,14 @@ export function Hero() {
       {/* Background */}
       <Image
         src="/images/hero/hero-main.jpg"
-        alt="CYMT STORE — streetwear premium bajo pedido"
+        alt="CYMT STORE — streetwear premium "
         fill
         priority
         sizes="100vw"
         className="object-cover object-center"
       />
-      <div className="absolute inset-0 bg-gradient-to-r from-bg via-bg/70 to-bg/20" />
-      <div className="absolute inset-0 bg-gradient-to-t from-bg via-transparent to-bg/40" />
+      <div className="absolute inset-0 bg-gradient-to-r from-bg via-bg/70 to-bg/10" />
+      <div className="absolute inset-0 bg-gradient-to-t from-bg via-transparent to-bg/20" />
 
       {/* Content */}
       <div className="container-x relative z-10 py-24">
@@ -40,7 +40,7 @@ export function Hero() {
           <motion.div variants={item}>
             <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface/60 px-3.5 py-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-ink-soft backdrop-blur">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />
-              El Salvador · Producción bajo pedido
+              El Salvador · Entregas en 48 Horas
             </span>
           </motion.div>
 
@@ -48,12 +48,12 @@ export function Hero() {
             variants={item}
             className="mt-6 font-display text-5xl font-bold leading-[0.95] tracking-tight text-balance sm:text-6xl lg:text-7xl"
           >
-            Viste tu <span className="text-brand">identidad.</span>
+            Tu Personalidad Merece <span className="text-brand">Diseños Exclusivos.</span>
           </motion.h1>
 
           <motion.p variants={item} className="mt-6 max-w-xl text-lg leading-relaxed text-ink-soft">
             CYMT STORE — streetwear premium diseñado en El Salvador. Drops exclusivos de Anime,
-            Rock, Naturaleza y Retro, fabricados bajo pedido con obsesión por el detalle.
+            Rock, Naturaleza, Retro y Mas. Entregas En 48 Horas.
           </motion.p>
 
           <motion.div variants={item} className="mt-9 flex flex-wrap items-center gap-3">

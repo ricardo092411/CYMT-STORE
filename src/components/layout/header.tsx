@@ -152,7 +152,7 @@ export function Header() {
             </div>
 
             <Link href="/favoritos" className={navLinkClass}>
-              Producción bajo pedido
+              Producción De Alta Calidad
             </Link>
           </nav>
 
