@@ -9,7 +9,7 @@
  *
  * Solo se renderiza cuando EDIT_MODE = true y hay un producto activo.
  */
-
+import { uploadImages } from "@/lib/storage";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X, Pencil, ImagePlus, Star, Images, Trash2 } from "lucide-react";
@@ -70,22 +70,47 @@ export function EditorPanel() {
   /* -------- acciones de imágenes (la portada SIEMPRE es el índice 0) ------- */
 
   async function handleChangeCover(fileList: FileList | null) {
-    if (!product || !fileList || fileList.length === 0) return;
-    const [dataUrl] = await filesToDataUrls(fileList);
+  if (!product || !fileList || fileList.length === 0) return;
+
+  try {
+    const urls = await uploadImages(fileList);
+
     const next = [...images];
-    if (next.length === 0) next.push(dataUrl);
-    else next[0] = dataUrl;
-    updateOverride(product.id, { images: next });
+
+    if (next.length === 0) {
+      next.push(urls[0]);
+    } else {
+      next[0] = urls[0];
+    }
+
+    updateOverride(product.id, {
+      images: next,
+    });
+  } catch (err) {
+    console.error("Error al subir portada:", err);
+    alert("Error al subir la portada.");
   }
+}
 
   async function handleAddMockups(fileList: FileList | null) {
-    if (!product || !fileList || fileList.length === 0) return;
-    const dataUrls = await filesToDataUrls(fileList);
+  if (!product || !fileList || fileList.length === 0) return;
+
+  try {
+    const urls = await uploadImages(fileList);
+
     // Se agregan al final: NUNCA se cambia la portada automáticamente.
     // Variantes nuevas inician vacías.
-    const nextVariants = [...variants, ...Array(dataUrls.length).fill("")];
-    updateOverride(product.id, { images: [...images, ...dataUrls], variants: nextVariants });
+    const nextVariants = [...variants, ...Array(urls.length).fill("")];
+
+    updateOverride(product.id, {
+      images: [...images, ...urls],
+      variants: nextVariants,
+    });
+  } catch (err) {
+    console.error("Error al subir mockups:", err);
+    alert("Error al subir las imágenes a Supabase.");
   }
+}
 
   function handleSetCover(index: number) {
     if (!product || index === 0) return;
@@ -179,7 +204,7 @@ export function EditorPanel() {
                   onClick={() => coverInputRef.current?.click()}
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-line bg-surface-2 px-4 text-sm font-medium text-ink transition hover:border-line-strong hover:bg-surface-3"
                 >
-                  <ImagePlus className="h-4 w-4" /> Cambiar imagen
+                  <ImagePlus className="h-4 w-4" /> 🔥 CAMBIAR PORTADA 🔥
                 </button>
                 <button
                   type="button"

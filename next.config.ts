@@ -7,10 +7,18 @@ import type { NextConfig } from "next";
  */
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  images: {
-    formats: ["image/avif", "image/webp"],
-    minimumCacheTTL: 60 * 60 * 24 * 30,
-  },
+ images: {
+  formats: ["image/avif", "image/webp"],
+  minimumCacheTTL: 60 * 60 * 24 * 30,
+
+  remotePatterns: [
+    {
+      protocol: "https",
+      hostname: "agkjlvkcmjzdzbttpsad.supabase.co",
+      pathname: "/storage/v1/object/public/**",
+    },
+  ],
+},
   experimental: {
     optimizePackageImports: ["lucide-react", "framer-motion"],
   },
