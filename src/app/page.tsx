@@ -62,6 +62,6 @@ function Pillar({ index, title, text }: { index: string; title: string; text: st
       <span className="font-display text-sm font-bold text-brand">{index}</span>
       <h3 className="mt-2 font-display text-lg font-semibold">{title}</h3>
       <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{text}</p>
-    </div>
+    </div>// Trigger deployment
   );
 }
