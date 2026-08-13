@@ -44,12 +44,23 @@ interface ProductVariantImageOperations {
 
 interface ProductVariantUpsertValues extends ProductVariantWriteValues {
   id?: number;
+  clientKey?: string;
   images: ProductVariantImageOperations;
+}
+
+interface ProductImageMoveValues {
+  imageId: number;
+  fromVariantId: number;
+  toVariantId?: number;
+  toVariantClientKey?: string;
+  position: number;
+  isCover: boolean;
 }
 
 interface ProductVariantOperations {
   upsert: ProductVariantUpsertValues[];
   deleteIds: number[];
+  moveImages: ProductImageMoveValues[];
 }
 
 class InvalidVariantOperationsError extends Error {}
@@ -115,6 +126,10 @@ function isNullableString(value: unknown): value is string | null {
 
 function isVariantColorStatus(value: unknown): value is VariantColorStatus {
   return value === "confirmed" || value === "requires_user_input";
+}
+
+function isVariantClientKey(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0 && value.length <= 200;
 }
 
 function hasUniqueIds(ids: number[]): boolean {
@@ -265,10 +280,51 @@ function toProductVariantUpsertValues(value: unknown): ProductVariantUpsertValue
   const images = toProductVariantImageOperations(value.images);
   if (!images) return null;
 
-  if (value.id === undefined) return { ...variant, images };
+  const clientKey = value.clientKey === undefined ? undefined : value.clientKey;
+  if (clientKey !== undefined && !isVariantClientKey(clientKey)) return null;
+
+  if (value.id === undefined) return { ...variant, ...(clientKey === undefined ? {} : { clientKey }), images };
 
   const id = productId(value.id);
-  return id === null ? null : { ...variant, id, images };
+  return id === null || clientKey !== undefined ? null : { ...variant, id, images };
+}
+
+function toProductImageMoveValues(value: unknown): ProductImageMoveValues | null {
+  if (!isRecord(value)) return null;
+
+  const imageId = productId(value.imageId);
+  const fromVariantId = productId(value.fromVariantId);
+  const toVariantId = value.toVariantId === undefined ? undefined : productId(value.toVariantId);
+  const toVariantClientKey =
+    value.toVariantClientKey === undefined ? undefined : value.toVariantClientKey;
+
+  if (
+    imageId === null ||
+    fromVariantId === null ||
+    (toVariantId === null && value.toVariantId !== undefined) ||
+    (toVariantClientKey !== undefined && !isVariantClientKey(toVariantClientKey)) ||
+    (toVariantId === undefined && toVariantClientKey === undefined) ||
+    (toVariantId !== undefined && toVariantClientKey !== undefined) ||
+    !isNonNegativeInteger(value.position) ||
+    typeof value.isCover !== "boolean"
+  ) {
+    return null;
+  }
+
+  if (toVariantId !== undefined && toVariantId !== null) {
+    return { imageId, fromVariantId, toVariantId, position: value.position, isCover: value.isCover };
+  }
+  if (isVariantClientKey(toVariantClientKey)) {
+    return {
+      imageId,
+      fromVariantId,
+      toVariantClientKey,
+      position: value.position,
+      isCover: value.isCover,
+    };
+  }
+
+  return null;
 }
 
 function toProductVariantOperations(value: unknown): ProductVariantOperations | null {
@@ -290,18 +346,33 @@ function toProductVariantOperations(value: unknown): ProductVariantOperations | 
     deleteIds.push(id);
   }
 
+  const moveImages: ProductImageMoveValues[] = [];
+  const rawMoveImages = value.moveImages === undefined ? [] : value.moveImages;
+  if (!Array.isArray(rawMoveImages)) return null;
+
+  for (const move of rawMoveImages) {
+    const moveValues = toProductImageMoveValues(move);
+    if (!moveValues) return null;
+    moveImages.push(moveValues);
+  }
+
   const upsertIds = upsert.flatMap((variant) => (variant.id === undefined ? [] : [variant.id]));
+  const clientKeys = upsert.flatMap((variant) =>
+    variant.clientKey === undefined ? [] : [variant.clientKey],
+  );
   if (
     !hasUniqueIds(upsertIds) ||
     !hasUniqueIds(deleteIds) ||
     upsertIds.some((id) => deleteIds.includes(id)) ||
+    new Set(clientKeys).size !== clientKeys.length ||
+    !hasUniqueIds(moveImages.map((move) => move.imageId)) ||
     !hasUniquePositions(upsert) ||
     !hasAtMostOneDefault(upsert)
   ) {
     return null;
   }
 
-  return { upsert, deleteIds };
+  return { upsert, deleteIds, moveImages };
 }
 
 function temporaryPositions(count: number, occupiedPositions: number[]): number[] {
@@ -334,6 +405,18 @@ function withNestedImages(
     }));
 }
 
+interface ImagePlacement {
+  id?: number;
+  position: number;
+  isCover: boolean;
+}
+
+function hasConsecutiveImagePositions(images: ImagePlacement[]): boolean {
+  return [...images]
+    .sort((left, right) => left.position - right.position)
+    .every((image, index) => image.position === index);
+}
+
 function validateVariantOperations(
   operations: ProductVariantOperations,
   existingVariants: ProductVariant[],
@@ -344,6 +427,14 @@ function validateVariantOperations(
   const updatingVariantIds = new Set(
     operations.upsert.flatMap((variant) => (variant.id === undefined ? [] : [variant.id])),
   );
+  const existingImagesById = new Map(existingImages.map((image) => [image.id, image]));
+  const imagesByVariantId = new Map<number, ProductImage[]>();
+
+  for (const image of existingImages) {
+    const variantImages = imagesByVariantId.get(image.productVariantId) ?? [];
+    variantImages.push(image);
+    imagesByVariantId.set(image.productVariantId, variantImages);
+  }
 
   for (const id of operations.deleteIds) {
     if (!variantsById.has(id)) {
@@ -365,13 +456,18 @@ function validateVariantOperations(
     throw new InvalidVariantOperationsError("Invalid final variant positions or default variant");
   }
 
-  const imagesByVariantId = new Map<number, ProductImage[]>();
-  for (const image of existingImages) {
-    const variantImages = imagesByVariantId.get(image.productVariantId) ?? [];
-    variantImages.push(image);
-    imagesByVariantId.set(image.productVariantId, variantImages);
+  const variantReferenceByUpsertIndex = operations.upsert.map(
+    (variant, index) => variant.id ?? variant.clientKey ?? `new-${index}`,
+  );
+  const newVariantReferencesByClientKey = new Map<string, string>();
+  for (const [index, variant] of operations.upsert.entries()) {
+    if (variant.id === undefined && variant.clientKey !== undefined) {
+      newVariantReferencesByClientKey.set(variant.clientKey, variantReferenceByUpsertIndex[index] as string);
+    }
   }
 
+  const imageUpsertIds = new Set<number>();
+  const imageDeleteIds = new Set<number>();
   for (const variant of operations.upsert) {
     if (variant.id === undefined) {
       if (
@@ -380,35 +476,154 @@ function validateVariantOperations(
       ) {
         throw new InvalidVariantOperationsError("New variants cannot update existing images");
       }
-
       continue;
     }
 
     const variantImages = imagesByVariantId.get(variant.id) ?? [];
     const imagesById = new Map(variantImages.map((image) => [image.id, image]));
-    const deletingImageIds = new Set(variant.images.deleteIds);
-    const updatingImageIds = new Set(
-      variant.images.upsert.flatMap((image) => (image.id === undefined ? [] : [image.id])),
-    );
-
     for (const id of variant.images.deleteIds) {
-      if (!imagesById.has(id)) {
+      if (!imagesById.has(id) || imageDeleteIds.has(id)) {
         throw new InvalidVariantOperationsError("Image does not belong to variant");
       }
+      imageDeleteIds.add(id);
     }
 
     for (const image of variant.images.upsert) {
-      if (image.id !== undefined && !imagesById.has(image.id)) {
-        throw new InvalidVariantOperationsError("Image does not belong to variant");
+      if (image.id !== undefined) {
+        if (!imagesById.has(image.id) || imageUpsertIds.has(image.id)) {
+          throw new InvalidVariantOperationsError("Image does not belong to variant");
+        }
+        imageUpsertIds.add(image.id);
       }
     }
+  }
 
-    const unchangedImages = variantImages.filter(
-      (image) => !deletingImageIds.has(image.id) && !updatingImageIds.has(image.id),
+  if ([...imageUpsertIds].some((id) => imageDeleteIds.has(id))) {
+    throw new InvalidVariantOperationsError("Image update conflicts with deletion");
+  }
+
+  const movedImageIds = new Set<number>();
+  const moveDestinationByImageId = new Map<number, number | string>();
+  for (const move of operations.moveImages) {
+    const fromVariant = variantsById.get(move.fromVariantId);
+    if (!fromVariant) {
+      throw new InvalidVariantOperationsError("Variant does not belong to product");
+    }
+
+    const destination =
+      move.toVariantId === undefined
+        ? move.toVariantClientKey === undefined
+          ? undefined
+          : newVariantReferencesByClientKey.get(move.toVariantClientKey)
+        : variantsById.has(move.toVariantId) && !deletingVariantIds.has(move.toVariantId)
+          ? move.toVariantId
+          : undefined;
+    if (destination === undefined) {
+      throw new InvalidVariantOperationsError("Move destination does not belong to product");
+    }
+
+    const image = existingImagesById.get(move.imageId);
+    if (!image || image.productVariantId !== fromVariant.id) {
+      throw new InvalidVariantOperationsError("Image does not belong to variant");
+    }
+    if (destination === move.fromVariantId) {
+      throw new InvalidVariantOperationsError("Image move must change variant");
+    }
+    if (
+      movedImageIds.has(move.imageId) ||
+      imageUpsertIds.has(move.imageId) ||
+      imageDeleteIds.has(move.imageId)
+    ) {
+      throw new InvalidVariantOperationsError("Image move conflicts with another image operation");
+    }
+
+    movedImageIds.add(move.imageId);
+    moveDestinationByImageId.set(move.imageId, destination);
+  }
+
+  const finalImagesByVariantReference = new Map<number | string, ImagePlacement[]>();
+  for (const variant of existingVariants) {
+    finalImagesByVariantReference.set(
+      variant.id,
+      (imagesByVariantId.get(variant.id) ?? []).map((image) => ({
+        id: image.id,
+        position: image.position,
+        isCover: image.isCover,
+      })),
     );
-    const finalImages = [...unchangedImages, ...variant.images.upsert];
+  }
+  for (const reference of variantReferenceByUpsertIndex) {
+    if (!finalImagesByVariantReference.has(reference)) {
+      finalImagesByVariantReference.set(reference, []);
+    }
+  }
+
+  for (const [index, variant] of operations.upsert.entries()) {
+    const reference = variantReferenceByUpsertIndex[index];
+    const finalImages = finalImagesByVariantReference.get(reference);
+    if (!finalImages) throw new InvalidVariantOperationsError("Variant image state is missing");
+
+    for (const imageId of variant.images.deleteIds) {
+      const imageIndex = finalImages.findIndex((image) => image.id === imageId);
+      if (imageIndex === -1) throw new InvalidVariantOperationsError("Image does not belong to variant");
+      finalImages.splice(imageIndex, 1);
+    }
+
+    for (const image of variant.images.upsert) {
+      if (image.id === undefined) {
+        finalImages.push({ position: image.position, isCover: image.isCover });
+        continue;
+      }
+
+      const imageIndex = finalImages.findIndex((current) => current.id === image.id);
+      if (imageIndex === -1) throw new InvalidVariantOperationsError("Image does not belong to variant");
+      finalImages[imageIndex] = {
+        id: image.id,
+        position: image.position,
+        isCover: image.isCover,
+      };
+    }
+  }
+
+  const movedVariantReferences = new Set<number | string>();
+  for (const move of operations.moveImages) {
+    const sourceImages = finalImagesByVariantReference.get(move.fromVariantId);
+    const destinationReference = moveDestinationByImageId.get(move.imageId);
+    const destinationImages =
+      destinationReference === undefined
+        ? undefined
+        : finalImagesByVariantReference.get(destinationReference);
+    const imageIndex = sourceImages?.findIndex((image) => image.id === move.imageId) ?? -1;
+
+    if (
+      !sourceImages ||
+      destinationReference === undefined ||
+      !destinationImages ||
+      imageIndex === -1
+    ) {
+      throw new InvalidVariantOperationsError("Image move state is invalid");
+    }
+
+    sourceImages.splice(imageIndex, 1);
+    destinationImages.push({
+      id: move.imageId,
+      position: move.position,
+      isCover: move.isCover,
+    });
+    movedVariantReferences.add(move.fromVariantId);
+    movedVariantReferences.add(destinationReference);
+  }
+
+  for (const id of deletingVariantIds) {
+    finalImagesByVariantReference.delete(id);
+  }
+
+  for (const [reference, finalImages] of finalImagesByVariantReference) {
     if (!hasUniquePositions(finalImages) || !hasAtMostOneCover(finalImages)) {
       throw new InvalidVariantOperationsError("Invalid final image positions or cover image");
+    }
+    if (movedVariantReferences.has(reference) && !hasConsecutiveImagePositions(finalImages)) {
+      throw new InvalidVariantOperationsError("Moved image positions must be consecutive");
     }
   }
 }
@@ -653,32 +868,41 @@ export async function PATCH(req: NextRequest) {
 
       validateVariantOperations(variantOperations, existingVariants, existingImages);
 
-      if (variantOperations.deleteIds.length > 0) {
-        await tx
-          .delete(productVariants)
-          .where(inArray(productVariants.id, variantOperations.deleteIds));
-      }
-
       const existingVariantOperations = variantOperations.upsert.filter(
         (variant): variant is ProductVariantUpsertValues & { id: number } =>
           variant.id !== undefined,
       );
+      const newVariantOperations = variantOperations.upsert.filter(
+        (variant) => variant.id === undefined,
+      );
+      const variantIdsToTemporarilyUpdate = new Set([
+        ...variantOperations.deleteIds,
+        ...existingVariantOperations.map((variant) => variant.id),
+      ]);
       const variantTemporaryPositions = temporaryPositions(
-        existingVariantOperations.length,
+        variantIdsToTemporarilyUpdate.size + newVariantOperations.length,
         existingVariants.map((variant) => variant.position),
       );
 
-      for (const [index, variant] of existingVariantOperations.entries()) {
+      let variantTemporaryPositionIndex = 0;
+      for (const variantId of variantIdsToTemporarilyUpdate) {
         await tx
           .update(productVariants)
-          .set({ position: variantTemporaryPositions[index], isDefault: false })
-          .where(eq(productVariants.id, variant.id));
+          .set({
+            position: variantTemporaryPositions[variantTemporaryPositionIndex++],
+            isDefault: false,
+          })
+          .where(eq(productVariants.id, variantId));
       }
 
-      const variantIdsForUpserts: number[] = [];
-      for (const variant of variantOperations.upsert) {
+      const variantIdsForUpserts = new Map<ProductVariantUpsertValues, number>();
+      const newVariantIdsByClientKey = new Map<string, number>();
+      for (const variant of existingVariantOperations) {
+        variantIdsForUpserts.set(variant, variant.id);
+      }
+
+      for (const variant of newVariantOperations) {
         if (variant.id !== undefined) {
-          variantIdsForUpserts.push(variant.id);
           continue;
         }
 
@@ -689,16 +913,113 @@ export async function PATCH(req: NextRequest) {
             colorName: variant.colorName,
             colorHex: variant.colorHex,
             colorStatus: variant.colorStatus,
-            position: variant.position,
-            isDefault: variant.isDefault,
+            position: variantTemporaryPositions[variantTemporaryPositionIndex++],
+            isDefault: false,
           })
           .returning();
 
         if (!createdVariant) throw new Error("Variant creation did not return a variant");
-        variantIdsForUpserts.push(createdVariant.id);
+        variantIdsForUpserts.set(variant, createdVariant.id);
+        if (variant.clientKey !== undefined) {
+          newVariantIdsByClientKey.set(variant.clientKey, createdVariant.id);
+        }
       }
 
-      for (const variant of existingVariantOperations) {
+      const imageDeleteIds = variantOperations.upsert.flatMap((variant) => variant.images.deleteIds);
+      if (imageDeleteIds.length > 0) {
+        await tx.delete(productImages).where(inArray(productImages.id, imageDeleteIds));
+      }
+
+      const existingImageOperations = variantOperations.upsert.flatMap((variant) =>
+        variant.images.upsert.flatMap((image) =>
+          image.id === undefined ? [] : [image as ProductImageUpsertValues & { id: number }],
+        ),
+      );
+      const movedImages = variantOperations.moveImages.map((move) => {
+        const productVariantId =
+          move.toVariantId ??
+          (move.toVariantClientKey === undefined
+            ? undefined
+            : newVariantIdsByClientKey.get(move.toVariantClientKey));
+        if (productVariantId === undefined) {
+          throw new Error("Move destination did not resolve to a product variant");
+        }
+        return { ...move, productVariantId };
+      });
+      const imageTemporaryPositions = temporaryPositions(
+        existingImageOperations.length + movedImages.length,
+        existingImages.map((image) => image.position),
+      );
+
+      const temporarilyUpdatedImageIds = [
+        ...existingImageOperations.map((image) => image.id),
+        ...movedImages.map((move) => move.imageId),
+      ];
+      for (const [index, imageId] of temporarilyUpdatedImageIds.entries()) {
+        await tx
+          .update(productImages)
+          .set({ position: imageTemporaryPositions[index], isCover: false })
+          .where(eq(productImages.id, imageId));
+      }
+
+      for (const move of movedImages) {
+        await tx
+          .update(productImages)
+          .set({
+            productVariantId: move.productVariantId,
+            position: move.position,
+            isCover: move.isCover,
+          })
+          .where(eq(productImages.id, move.imageId));
+      }
+
+      for (const image of existingImageOperations) {
+        await tx
+          .update(productImages)
+          .set({
+            storageKey: image.storageKey,
+            legacyUrl: image.legacyUrl,
+            originalFilename: image.originalFilename,
+            originalSourcePath: image.originalSourcePath,
+            position: image.position,
+            isCover: image.isCover,
+          })
+          .where(eq(productImages.id, image.id));
+      }
+
+      for (const variant of variantOperations.upsert) {
+        const productVariantId = variantIdsForUpserts.get(variant);
+        if (productVariantId === undefined) {
+          throw new Error("Variant upsert did not resolve to a product variant");
+        }
+
+        for (const image of variant.images.upsert) {
+          if (image.id !== undefined) continue;
+
+          await tx.insert(productImages).values({
+            productVariantId,
+            storageKey: image.storageKey,
+            legacyUrl: image.legacyUrl,
+            originalFilename: image.originalFilename,
+            originalSourcePath: image.originalSourcePath,
+            position: image.position,
+            isCover: image.isCover,
+          });
+        }
+      }
+
+      if (variantOperations.deleteIds.length > 0) {
+        await tx
+          .delete(productVariants)
+          .where(inArray(productVariants.id, variantOperations.deleteIds));
+      }
+
+      for (const variant of variantOperations.upsert) {
+        const productVariantId = variantIdsForUpserts.get(variant);
+        if (productVariantId === undefined) {
+          throw new Error("Variant upsert did not resolve to a product variant");
+        }
+
         await tx
           .update(productVariants)
           .set({
@@ -708,72 +1029,7 @@ export async function PATCH(req: NextRequest) {
             position: variant.position,
             isDefault: variant.isDefault,
           })
-          .where(eq(productVariants.id, variant.id));
-      }
-
-      const existingImagesByVariantId = new Map<number, ProductImage[]>();
-      for (const image of existingImages) {
-        const variantImages = existingImagesByVariantId.get(image.productVariantId) ?? [];
-        variantImages.push(image);
-        existingImagesByVariantId.set(image.productVariantId, variantImages);
-      }
-
-      for (const [index, variant] of variantOperations.upsert.entries()) {
-        const productVariantId = variantIdsForUpserts[index];
-
-        if (variant.images.deleteIds.length > 0) {
-          await tx
-            .delete(productImages)
-            .where(inArray(productImages.id, variant.images.deleteIds));
-        }
-
-        const existingImageOperations = variant.images.upsert.filter(
-          (image): image is ProductImageUpsertValues & { id: number } => image.id !== undefined,
-        );
-        const imageTemporaryPositions = temporaryPositions(
-          existingImageOperations.length,
-          (existingImagesByVariantId.get(productVariantId) ?? []).map((image) => image.position),
-        );
-
-        for (const [imageIndex, image] of existingImageOperations.entries()) {
-          await tx
-            .update(productImages)
-            .set({ position: imageTemporaryPositions[imageIndex], isCover: false })
-            .where(eq(productImages.id, image.id));
-        }
-
-        for (const image of variant.images.upsert) {
-          if (image.id !== undefined) continue;
-
-          const [createdImage] = await tx
-            .insert(productImages)
-            .values({
-              productVariantId,
-              storageKey: image.storageKey,
-              legacyUrl: image.legacyUrl,
-              originalFilename: image.originalFilename,
-              originalSourcePath: image.originalSourcePath,
-              position: image.position,
-              isCover: image.isCover,
-            })
-            .returning();
-
-          if (!createdImage) throw new Error("Image creation did not return an image");
-        }
-
-        for (const image of existingImageOperations) {
-          await tx
-            .update(productImages)
-            .set({
-              storageKey: image.storageKey,
-              legacyUrl: image.legacyUrl,
-              originalFilename: image.originalFilename,
-              originalSourcePath: image.originalSourcePath,
-              position: image.position,
-              isCover: image.isCover,
-            })
-            .where(eq(productImages.id, image.id));
-        }
+          .where(eq(productVariants.id, productVariantId));
       }
 
       const [product] =

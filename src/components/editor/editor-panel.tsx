@@ -67,6 +67,7 @@ type ImageVariantDraft = {
   position: number;
   isCover: boolean;
   colorName: string;
+  sourceColorName: string | null;
   colorHex: string | null;
   variantIsDefault: boolean;
 };
@@ -127,6 +128,7 @@ function buildImageDraftState(product: Product): {
             position: image.position,
             isCover: image.isCover,
             colorName: variant.colorName ?? "",
+            sourceColorName: variant.colorName,
             colorHex: variant.colorHex,
             variantIsDefault: variant.isDefault,
           })),
@@ -159,39 +161,12 @@ function buildImageDraftState(product: Product): {
       position: index,
       isCover: index === 0,
       colorName: hasAlignedLegacyVariants ? product.variants?.[index] ?? "" : "",
+      sourceColorName: hasAlignedLegacyVariants ? product.variants?.[index] ?? null : null,
       colorHex: null,
       variantIsDefault: index === 0,
     })),
     emptyVariants: [],
   };
-}
-
-function validateRelationalImageGrouping(imageDrafts: ImageVariantDraft[]): void {
-  const colorByVariantId = new Map<number, string>();
-  const variantIdsByColor = new Map<string, Set<number>>();
-
-  for (const image of imageDrafts) {
-    if (image.variantId === undefined) continue;
-
-    const normalizedColorKey = colorKey(image.colorName);
-    const previousColorKey = colorByVariantId.get(image.variantId);
-    if (previousColorKey !== undefined && previousColorKey !== normalizedColorKey) {
-      throw new Error(
-        "Las imágenes de una variante relacional existente deben conservar el mismo color.",
-      );
-    }
-    colorByVariantId.set(image.variantId, normalizedColorKey);
-
-    const variantIds = variantIdsByColor.get(normalizedColorKey) ?? new Set<number>();
-    variantIds.add(image.variantId);
-    variantIdsByColor.set(normalizedColorKey, variantIds);
-  }
-
-  if ([...variantIdsByColor.values()].some((variantIds) => variantIds.size > 1)) {
-    throw new Error(
-      "No se pueden fusionar dos variantes relacionales existentes sin cambiar la identidad de sus imágenes.",
-    );
-  }
 }
 
 function buildProductVariantTree(
@@ -203,8 +178,6 @@ function buildProductVariantTree(
     throw new Error("Asigna un color a cada mockup antes de guardar.");
   }
 
-  validateRelationalImageGrouping(imageDrafts);
-
   const groups = new Map<string, ImageVariantDraft[]>();
   for (const image of imageDrafts) {
     const normalizedColorKey = colorKey(image.colorName);
@@ -213,8 +186,39 @@ function buildProductVariantTree(
     groups.set(normalizedColorKey, group);
   }
 
-  const variantsFromImages = [...groups.values()].map((group) => {
-    const existingVariantId = group.find((image) => image.variantId !== undefined)?.variantId;
+  const groupEntries = [...groups.entries()];
+  const assignedVariantIds = new Set<number>();
+  const variantIdByColorKey = new Map<string, number>();
+
+  for (const [normalizedColorKey, group] of groupEntries) {
+    const matchingVariantId = group.find(
+      (image) =>
+        image.variantId !== undefined &&
+        image.sourceColorName !== null &&
+        colorKey(image.sourceColorName) === normalizedColorKey,
+    )?.variantId;
+
+    if (matchingVariantId !== undefined && !assignedVariantIds.has(matchingVariantId)) {
+      assignedVariantIds.add(matchingVariantId);
+      variantIdByColorKey.set(normalizedColorKey, matchingVariantId);
+    }
+  }
+
+  for (const [normalizedColorKey, group] of groupEntries) {
+    if (variantIdByColorKey.has(normalizedColorKey)) continue;
+
+    const reusableVariantId = group.find(
+      (image) => image.variantId !== undefined && !assignedVariantIds.has(image.variantId),
+    )?.variantId;
+
+    if (reusableVariantId !== undefined) {
+      assignedVariantIds.add(reusableVariantId);
+      variantIdByColorKey.set(normalizedColorKey, reusableVariantId);
+    }
+  }
+
+  const variantsFromImages = groupEntries.map(([normalizedColorKey, group]) => {
+    const existingVariantId = variantIdByColorKey.get(normalizedColorKey);
     const selectedCoverIndex = group.findIndex((image) => image.isCover);
     const coverIndex = selectedCoverIndex === -1 ? 0 : selectedCoverIndex;
 
@@ -401,6 +405,7 @@ export function EditorPanel() {
             position: 0,
             isCover: true,
             colorName: current[0]?.colorName ?? "",
+            sourceColorName: null,
             colorHex: null,
             variantIsDefault: true,
           } satisfies ImageVariantDraft;
@@ -434,6 +439,7 @@ export function EditorPanel() {
           position: current.length + index,
           isCover: false,
           colorName: "",
+          sourceColorName: null,
           colorHex: null,
           variantIsDefault: false,
         })),
@@ -448,8 +454,6 @@ export function EditorPanel() {
   }
 
   function coverScope(image: ImageVariantDraft): string {
-    if (image.variantId !== undefined) return `variant-${image.variantId}`;
-
     const normalizedColorKey = colorKey(image.colorName);
     return normalizedColorKey === "" ? image.key : `color-${normalizedColorKey}`;
   }

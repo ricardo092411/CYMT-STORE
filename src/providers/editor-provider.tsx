@@ -134,12 +134,23 @@ interface ProductVariantImageOperationsPayload {
 
 interface ProductVariantUpsertPayload extends ProductVariantWritePayload {
   id?: number;
+  clientKey?: string;
   images: ProductVariantImageOperationsPayload;
+}
+
+interface ProductVariantImageMovePayload {
+  imageId: number;
+  fromVariantId: number;
+  toVariantId?: number;
+  toVariantClientKey?: string;
+  position: number;
+  isCover: boolean;
 }
 
 interface ProductVariantOperationsPayload {
   upsert: ProductVariantUpsertPayload[];
   deleteIds: number[];
+  moveImages: ProductVariantImageMovePayload[];
 }
 
 type ProductListUpdater = (products: Product[]) => Product[];
@@ -353,47 +364,6 @@ function sameProductVariant(current: ProductVariant, next: ProductVariantReplace
   );
 }
 
-function buildProductVariantImageOperations(
-  currentImages: ProductVariantImage[],
-  nextImages: ProductVariantImageReplacement[],
-): ProductVariantImageOperationsPayload {
-  const currentImagesById = confirmedItemsById(currentImages, "Product variant image");
-  const retainedImageIds = new Set<number>();
-
-  for (const image of nextImages) {
-    const imageId = toEntityId(image.id, "Product variant image");
-    if (imageId === null) continue;
-    if (!currentImagesById.has(imageId)) {
-      throw new Error("Product variant image id is not confirmed for this variant");
-    }
-    if (retainedImageIds.has(imageId)) {
-      throw new Error("Product variant image ids must be unique in a replacement");
-    }
-    retainedImageIds.add(imageId);
-  }
-
-  const deleteIds = [...currentImagesById.keys()].filter((id) => !retainedImageIds.has(id));
-  const upsert: ProductVariantImageUpsertPayload[] = [];
-
-  for (const image of nextImages) {
-    const imageId = toEntityId(image.id, "Product variant image");
-    if (imageId === null) {
-      upsert.push(toProductVariantImageWritePayload(image));
-      continue;
-    }
-
-    const currentImage = currentImagesById.get(imageId);
-    if (!currentImage) {
-      throw new Error("Product variant image id is not confirmed for this variant");
-    }
-    if (!sameProductVariantImage(currentImage, image)) {
-      upsert.push({ id: currentImage.id, ...toProductVariantImageWritePayload(image) });
-    }
-  }
-
-  return { upsert, deleteIds };
-}
-
 function hasProductVariantImageOperations(
   operations: ProductVariantImageOperationsPayload,
 ): boolean {
@@ -405,6 +375,10 @@ function buildProductVariantOperations(
   nextVariants: ProductVariantReplacement[],
 ): ProductVariantOperationsPayload | null {
   const currentVariantsById = confirmedItemsById(currentVariants, "Product variant");
+  const currentImagesById = confirmedItemsById(
+    currentVariants.flatMap((variant) => variant.images),
+    "Product variant image",
+  );
   const retainedVariantIds = new Set<number>();
 
   for (const variant of nextVariants) {
@@ -420,20 +394,85 @@ function buildProductVariantOperations(
   }
 
   const deleteIds = [...currentVariantsById.keys()].filter((id) => !retainedVariantIds.has(id));
+  const destinations = new Map<
+    ProductVariantReplacement,
+    { id?: number; clientKey?: string }
+  >();
+  let newVariantIndex = 0;
+
+  for (const variant of nextVariants) {
+    const variantId = toEntityId(variant.id, "Product variant");
+    if (variantId !== null) {
+      destinations.set(variant, { id: variantId });
+      continue;
+    }
+
+    destinations.set(variant, {
+      clientKey: `new-variant-${crypto.randomUUID()}-${newVariantIndex++}`,
+    });
+  }
+
+  const nextImagesById = new Map<
+    number,
+    { image: ProductVariantImageReplacement; destination: { id?: number; clientKey?: string } }
+  >();
+
+  for (const variant of nextVariants) {
+    const destination = destinations.get(variant);
+    if (!destination) throw new Error("Product variant destination is missing");
+
+    for (const image of variant.images) {
+      const imageId = toEntityId(image.id, "Product variant image");
+      if (imageId === null) continue;
+      if (!currentImagesById.has(imageId)) {
+        throw new Error("Product variant image id is not confirmed for this product");
+      }
+      if (nextImagesById.has(imageId)) {
+        throw new Error("Product variant image ids must be unique in a replacement");
+      }
+      nextImagesById.set(imageId, { image, destination });
+    }
+  }
+
+  const moveImages: ProductVariantImageMovePayload[] = [];
+  for (const [imageId, { image, destination }] of nextImagesById) {
+    const currentImage = currentImagesById.get(imageId);
+    if (!currentImage) throw new Error("Product variant image is not confirmed");
+
+    if (destination.id === currentImage.productVariantId) continue;
+
+    if (destination.id === undefined && !destination.clientKey) {
+      throw new Error("New product variant client key is missing");
+    }
+
+    moveImages.push({
+      imageId,
+      fromVariantId: currentImage.productVariantId,
+      ...(destination.id === undefined
+        ? { toVariantClientKey: destination.clientKey }
+        : { toVariantId: destination.id }),
+      position: image.position,
+      isCover: image.isCover,
+    });
+  }
+
   const upsert: ProductVariantUpsertPayload[] = [];
 
   for (const variant of nextVariants) {
     const variantId = toEntityId(variant.id, "Product variant");
+    const destination = destinations.get(variant);
+    if (!destination) throw new Error("Product variant destination is missing");
+
     if (variantId === null) {
       upsert.push({
         ...toProductVariantWritePayload(variant),
+        clientKey: destination.clientKey,
         images: {
-          upsert: variant.images.map((image) => {
-            if (toEntityId(image.id, "Product variant image") !== null) {
-              throw new Error("A new product variant cannot include a persisted image id");
-            }
-            return toProductVariantImageWritePayload(image);
-          }),
+          upsert: variant.images.flatMap((image) =>
+            toEntityId(image.id, "Product variant image") === null
+              ? [toProductVariantImageWritePayload(image)]
+              : [],
+          ),
           deleteIds: [],
         },
       });
@@ -444,7 +483,26 @@ function buildProductVariantOperations(
     if (!currentVariant) {
       throw new Error("Product variant id is not confirmed for this product");
     }
-    const imageOperations = buildProductVariantImageOperations(currentVariant.images, variant.images);
+    const imageOperations: ProductVariantImageOperationsPayload = {
+      upsert: variant.images.flatMap((image) => {
+        const imageId = toEntityId(image.id, "Product variant image");
+        if (imageId === null) return [toProductVariantImageWritePayload(image)];
+
+        const currentImage = currentImagesById.get(imageId);
+        if (!currentImage) {
+          throw new Error("Product variant image id is not confirmed for this product");
+        }
+        if (currentImage.productVariantId !== currentVariant.id) return [];
+
+        return sameProductVariantImage(currentImage, image)
+          ? []
+          : [{ id: currentImage.id, ...toProductVariantImageWritePayload(image) }];
+      }),
+      deleteIds: currentVariant.images
+        .filter((image) => !nextImagesById.has(image.id))
+        .map((image) => image.id),
+    };
+
     if (!sameProductVariant(currentVariant, variant) || hasProductVariantImageOperations(imageOperations)) {
       upsert.push({
         id: currentVariant.id,
@@ -454,7 +512,9 @@ function buildProductVariantOperations(
     }
   }
 
-  return upsert.length > 0 || deleteIds.length > 0 ? { upsert, deleteIds } : null;
+  return upsert.length > 0 || deleteIds.length > 0 || moveImages.length > 0
+    ? { upsert, deleteIds, moveImages }
+    : null;
 }
 
 function hasProductVariants(value: unknown): boolean {
