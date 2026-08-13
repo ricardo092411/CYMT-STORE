@@ -9,13 +9,18 @@
  *
  * Solo se renderiza cuando EDIT_MODE = true y hay un producto activo.
  */
-import { uploadImages } from "@/lib/storage";
+import {
+  getProductImagePublicUrl,
+  uploadImages,
+  uploadProductImages,
+} from "@/lib/storage";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { X, Pencil, ImagePlus, Star, Images, Trash2 } from "lucide-react";
+import { ImagePlus, Images, Pencil, Star, Trash2, X } from "lucide-react";
 import { useEditor } from "@/providers/editor-provider";
 import { EDIT_MODE } from "@/config/edit-mode";
 import { cn } from "@/lib/utils";
+import type { Product } from "@/data/catalog";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -23,38 +28,307 @@ const inputClass =
   "h-11 w-full rounded-xl border border-line bg-bg px-4 text-ink outline-none transition focus:border-brand placeholder:text-ink-faint";
 const labelClass = "mb-1.5 block text-xs uppercase tracking-wider text-ink-muted";
 
-/** Convierte archivos seleccionados a data URLs persistibles. */
-function filesToDataUrls(files: FileList): Promise<string[]> {
-  return Promise.all(
-    Array.from(files).map(
-      (file) =>
-        new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = () => reject(reader.error);
-          reader.readAsDataURL(file);
-        }),
-    ),
-  );
+type ProductVariantColorStatus = "confirmed" | "requires_user_input";
+
+type ProductVariantImageDraft = {
+  id?: number;
+  storageKey: string | null;
+  legacyUrl: string | null;
+  originalFilename: string;
+  originalSourcePath: string | null;
+  position: number;
+  isCover: boolean;
+};
+
+/** Forma completa que acepta replaceProductVariants sin inventar un productId. */
+type ProductVariantTreeDraft = {
+  id: number;
+  colorName: string | null;
+  colorHex: string | null;
+  colorStatus: ProductVariantColorStatus;
+  position: number;
+  isDefault: boolean;
+  images: ProductVariantImageDraft[];
+};
+
+/**
+ * Estado de edición que hace que la galería sea el único lugar para asociar
+ * cada imagen a un color. No se persiste hasta guardar.
+ */
+type ImageVariantDraft = {
+  key: string;
+  variantId?: number;
+  imageId?: number;
+  previewUrl: string;
+  storageKey: string | null;
+  legacyUrl: string | null;
+  originalFilename: string;
+  originalSourcePath: string | null;
+  position: number;
+  isCover: boolean;
+  colorName: string;
+  colorHex: string | null;
+  variantIsDefault: boolean;
+};
+
+type EmptyProductVariantDraft = Omit<ProductVariantTreeDraft, "images"> & {
+  images: [];
+};
+
+function normalizeColorName(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function colorKey(value: string): string {
+  return normalizeColorName(value).toLocaleLowerCase();
+}
+
+function legacyFilename(url: string, index: number): string {
+  try {
+    const pathname = url.split(/[?#]/)[0] ?? "";
+    const encodedFilename = pathname.split("/").filter(Boolean).pop();
+    if (encodedFilename) {
+      const filename = decodeURIComponent(encodedFilename).trim();
+      if (filename) return filename;
+    }
+  } catch {
+    // Una ruta legacy no confiable usa un nombre técnico, pero no se descarta.
+  }
+
+  return `legacy-image-${index + 1}`;
+}
+
+function buildImageDraftState(product: Product): {
+  imageDrafts: ImageVariantDraft[];
+  emptyVariants: EmptyProductVariantDraft[];
+} {
+  const relationalVariants = product.productVariants ?? [];
+
+  if (relationalVariants.length > 0) {
+    const orderedVariants = [...relationalVariants].sort(
+      (left, right) => left.position - right.position,
+    );
+
+    return {
+      imageDrafts: orderedVariants.flatMap((variant) =>
+        [...variant.images]
+          .sort((left, right) => left.position - right.position)
+          .map((image) => ({
+            key: `relational-${variant.id}-${image.id}`,
+            variantId: variant.id,
+            imageId: image.id,
+            previewUrl:
+              image.legacyUrl ??
+              (image.storageKey ? getProductImagePublicUrl(image.storageKey) : ""),
+            storageKey: image.storageKey,
+            legacyUrl: image.legacyUrl,
+            originalFilename: image.originalFilename,
+            originalSourcePath: image.originalSourcePath,
+            position: image.position,
+            isCover: image.isCover,
+            colorName: variant.colorName ?? "",
+            colorHex: variant.colorHex,
+            variantIsDefault: variant.isDefault,
+          })),
+      ),
+      emptyVariants: orderedVariants
+        .filter((variant) => variant.images.length === 0)
+        .map((variant) => ({
+          id: variant.id,
+          colorName: variant.colorName,
+          colorHex: variant.colorHex,
+          colorStatus:
+            variant.colorStatus === "confirmed" ? "confirmed" : "requires_user_input",
+          position: variant.position,
+          isDefault: variant.isDefault,
+          images: [],
+        })),
+    };
+  }
+
+  const hasAlignedLegacyVariants = product.variants?.length === product.images.length;
+
+  return {
+    imageDrafts: product.images.map((legacyUrl, index) => ({
+      key: `legacy-${index}-${legacyUrl}`,
+      previewUrl: legacyUrl,
+      storageKey: null,
+      legacyUrl,
+      originalFilename: legacyFilename(legacyUrl, index),
+      originalSourcePath: null,
+      position: index,
+      isCover: index === 0,
+      colorName: hasAlignedLegacyVariants ? product.variants?.[index] ?? "" : "",
+      colorHex: null,
+      variantIsDefault: index === 0,
+    })),
+    emptyVariants: [],
+  };
+}
+
+function validateRelationalImageGrouping(imageDrafts: ImageVariantDraft[]): void {
+  const colorByVariantId = new Map<number, string>();
+  const variantIdsByColor = new Map<string, Set<number>>();
+
+  for (const image of imageDrafts) {
+    if (image.variantId === undefined) continue;
+
+    const normalizedColorKey = colorKey(image.colorName);
+    const previousColorKey = colorByVariantId.get(image.variantId);
+    if (previousColorKey !== undefined && previousColorKey !== normalizedColorKey) {
+      throw new Error(
+        "Las imágenes de una variante relacional existente deben conservar el mismo color.",
+      );
+    }
+    colorByVariantId.set(image.variantId, normalizedColorKey);
+
+    const variantIds = variantIdsByColor.get(normalizedColorKey) ?? new Set<number>();
+    variantIds.add(image.variantId);
+    variantIdsByColor.set(normalizedColorKey, variantIds);
+  }
+
+  if ([...variantIdsByColor.values()].some((variantIds) => variantIds.size > 1)) {
+    throw new Error(
+      "No se pueden fusionar dos variantes relacionales existentes sin cambiar la identidad de sus imágenes.",
+    );
+  }
+}
+
+function buildProductVariantTree(
+  imageDrafts: ImageVariantDraft[],
+  emptyVariants: EmptyProductVariantDraft[],
+  nextTemporaryVariantId: () => number,
+): ProductVariantTreeDraft[] {
+  if (imageDrafts.some((image) => normalizeColorName(image.colorName) === "")) {
+    throw new Error("Asigna un color a cada mockup antes de guardar.");
+  }
+
+  validateRelationalImageGrouping(imageDrafts);
+
+  const groups = new Map<string, ImageVariantDraft[]>();
+  for (const image of imageDrafts) {
+    const normalizedColorKey = colorKey(image.colorName);
+    const group = groups.get(normalizedColorKey) ?? [];
+    group.push(image);
+    groups.set(normalizedColorKey, group);
+  }
+
+  const variantsFromImages = [...groups.values()].map((group) => {
+    const existingVariantId = group.find((image) => image.variantId !== undefined)?.variantId;
+    const selectedCoverIndex = group.findIndex((image) => image.isCover);
+    const coverIndex = selectedCoverIndex === -1 ? 0 : selectedCoverIndex;
+
+    return {
+      id: existingVariantId ?? nextTemporaryVariantId(),
+      colorName: normalizeColorName(group[0]?.colorName ?? ""),
+      colorHex: group.find((image) => image.colorHex !== null)?.colorHex ?? null,
+      colorStatus: "confirmed" as const,
+      position: 0,
+      isDefault: group.some((image) => image.variantIsDefault),
+      images: group.map((image, position) => ({
+        ...(image.imageId === undefined ? {} : { id: image.imageId }),
+        storageKey: image.storageKey,
+        legacyUrl: image.legacyUrl,
+        originalFilename: image.originalFilename,
+        originalSourcePath: image.originalSourcePath,
+        position,
+        isCover: position === coverIndex,
+      })),
+    } satisfies ProductVariantTreeDraft;
+  });
+
+  const variants = [...variantsFromImages, ...emptyVariants.map((variant) => ({ ...variant }))];
+  const existingDefaultIndex = variants.findIndex((variant) => variant.isDefault);
+  const defaultIndex =
+    existingDefaultIndex === -1 && variants.length > 0 ? 0 : existingDefaultIndex;
+
+  return variants.map((variant, position) => {
+    const existingCoverIndex = variant.images.findIndex((image) => image.isCover);
+    const coverIndex = existingCoverIndex === -1 ? 0 : existingCoverIndex;
+
+    return {
+      ...variant,
+      position,
+      isDefault: position === defaultIndex,
+      images: variant.images.map((image, imagePosition) => ({
+        ...image,
+        position: imagePosition,
+        isCover: imagePosition === coverIndex,
+      })),
+    };
+  });
+}
+
+function validateProductVariantTree(variants: ProductVariantTreeDraft[]): void {
+  const variantIds = new Set<number>();
+  let defaultCount = 0;
+
+  for (const variant of variants) {
+    if (!Number.isInteger(variant.id)) {
+      throw new Error("Cada variante debe tener un ID entero válido.");
+    }
+    if (variantIds.has(variant.id)) {
+      throw new Error("Los IDs de las variantes deben ser únicos.");
+    }
+    variantIds.add(variant.id);
+
+    if (
+      (variant.colorName !== null && typeof variant.colorName !== "string") ||
+      (variant.colorHex !== null && typeof variant.colorHex !== "string") ||
+      (variant.colorStatus !== "confirmed" && variant.colorStatus !== "requires_user_input") ||
+      typeof variant.isDefault !== "boolean" ||
+      !Number.isInteger(variant.position) ||
+      !Array.isArray(variant.images)
+    ) {
+      throw new Error("Hay datos de variante inválidos. Revisa los campos antes de guardar.");
+    }
+
+    if (variant.isDefault) defaultCount += 1;
+    let coverCount = 0;
+
+    for (const image of variant.images) {
+      if (
+        (image.id !== undefined && (!Number.isInteger(image.id) || image.id <= 0)) ||
+        !Number.isInteger(image.position) ||
+        typeof image.isCover !== "boolean" ||
+        typeof image.originalFilename !== "string" ||
+        image.originalFilename.trim() === "" ||
+        (image.storageKey === null && image.legacyUrl === null)
+      ) {
+        throw new Error("Una imagen de variante contiene datos inválidos.");
+      }
+      if (image.isCover) coverCount += 1;
+    }
+
+    if (coverCount > 1) {
+      throw new Error("Cada variante puede tener una sola portada.");
+    }
+  }
+
+  if (defaultCount > 1) {
+    throw new Error("Solo una variante puede ser predeterminada.");
+  }
 }
 
 export function EditorPanel() {
-  const { enabled, activeId, closeEditor, getLiveProduct, updateOverride, deleteProduct } =
-    useEditor();
+  const {
+    enabled,
+    activeId,
+    closeEditor,
+    getLiveProduct,
+    updateOverride,
+    replaceProductVariants,
+    deleteProduct,
+  } = useEditor();
 
-  /* Catálogo vivo: incluye productos base + creados dinámicamente */
   const product = activeId ? getLiveProduct(activeId) : undefined;
-
-  /* Estado fusionado que se muestra en el panel */
   const images = product?.images ?? [];
-  const variants = product?.variants ?? [];
   const name = product?.name ?? "";
   const price = product?.price ?? 0;
   const description = product?.description ?? "";
   const type = product?.type ?? "";
   const status = product?.status ?? "nuevo";
 
-  /* El precio se edita como texto para permitir decimales a medio escribir */
   const [priceText, setPriceText] = useState("");
   useEffect(() => {
     if (product) setPriceText(String(product.price));
@@ -62,87 +336,208 @@ export function EditorPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId]);
 
+  const [imageDrafts, setImageDrafts] = useState<ImageVariantDraft[]>([]);
+  const [emptyVariants, setEmptyVariants] = useState<EmptyProductVariantDraft[]>([]);
+  const [imageDraftProductId, setImageDraftProductId] = useState<string | null>(null);
+  const [variantSaveError, setVariantSaveError] = useState<string | null>(null);
+  const [isSavingVariants, setIsSavingVariants] = useState(false);
+  const [isUploadingMockups, setIsUploadingMockups] = useState(false);
+  const nextTemporaryVariantId = useRef(-1);
+  const confirmedVariantsAwaitingSync = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!product) {
+      if (imageDraftProductId !== null) {
+        setImageDraftProductId(null);
+        setImageDrafts([]);
+        setEmptyVariants([]);
+        setVariantSaveError(null);
+      }
+      return;
+    }
+
+    if (
+      imageDraftProductId !== product.id ||
+      confirmedVariantsAwaitingSync.current === product.id
+    ) {
+      const nextDraft = buildImageDraftState(product);
+      setImageDrafts(nextDraft.imageDrafts);
+      setEmptyVariants(nextDraft.emptyVariants);
+      setImageDraftProductId(product.id);
+      setVariantSaveError(null);
+      confirmedVariantsAwaitingSync.current = null;
+    }
+  }, [imageDraftProductId, product]);
+
   const coverInputRef = useRef<HTMLInputElement>(null);
   const mockupsInputRef = useRef<HTMLInputElement>(null);
 
   if (!EDIT_MODE || !enabled) return null;
 
-  /* -------- acciones de imágenes (la portada SIEMPRE es el índice 0) ------- */
-
   async function handleChangeCover(fileList: FileList | null) {
-  if (!product || !fileList || fileList.length === 0) return;
+    if (!product || !fileList || fileList.length === 0) return;
 
-  try {
-    const urls = await uploadImages(fileList);
+    try {
+      const urls = await uploadImages(fileList);
+      const nextImages = [...images];
 
-    const next = [...images];
+      if (nextImages.length === 0) {
+        nextImages.push(urls[0] ?? "");
+      } else {
+        nextImages[0] = urls[0] ?? nextImages[0] ?? "";
+      }
 
-    if (next.length === 0) {
-      next.push(urls[0]);
-    } else {
-      next[0] = urls[0];
+      updateOverride(product.id, { images: nextImages });
+
+      if ((product.productVariants ?? []).length === 0 && urls[0]) {
+        setImageDrafts((current) => {
+          const replacement = {
+            key: current[0]?.key ?? `legacy-cover-${urls[0]}`,
+            previewUrl: urls[0],
+            storageKey: null,
+            legacyUrl: urls[0],
+            originalFilename: legacyFilename(urls[0], 0),
+            originalSourcePath: null,
+            position: 0,
+            isCover: true,
+            colorName: current[0]?.colorName ?? "",
+            colorHex: null,
+            variantIsDefault: true,
+          } satisfies ImageVariantDraft;
+
+          return current.length === 0
+            ? [replacement]
+            : [replacement, ...current.slice(1).map((image) => ({ ...image, isCover: false }))];
+        });
+      }
+    } catch (error) {
+      console.error("Error al subir portada:", error);
+      alert("Error al subir la portada.");
     }
-
-    updateOverride(product.id, {
-      images: next,
-    });
-  } catch (err) {
-    console.error("Error al subir portada:", err);
-    alert("Error al subir la portada.");
   }
-}
 
   async function handleAddMockups(fileList: FileList | null) {
-  if (!product || !fileList || fileList.length === 0) return;
+    if (!product || !fileList || fileList.length === 0 || isUploadingMockups) return;
 
-  try {
-    const urls = await uploadImages(fileList);
+    try {
+      setIsUploadingMockups(true);
+      const uploadedImages = await uploadProductImages(fileList);
+      setImageDrafts((current) => [
+        ...current,
+        ...uploadedImages.map((image, index) => ({
+          key: `uploaded-${image.storageKey}`,
+          previewUrl: image.publicUrl,
+          storageKey: image.storageKey,
+          legacyUrl: null,
+          originalFilename: image.originalFilename,
+          originalSourcePath: null,
+          position: current.length + index,
+          isCover: false,
+          colorName: "",
+          colorHex: null,
+          variantIsDefault: false,
+        })),
+      ]);
+      setVariantSaveError(null);
+    } catch (error) {
+      console.error("Error al subir mockups:", error);
+      setVariantSaveError("No fue posible subir los mockups a Supabase.");
+    } finally {
+      setIsUploadingMockups(false);
+    }
+  }
 
-    // Se agregan al final: NUNCA se cambia la portada automáticamente.
-    // Variantes nuevas inician vacías.
-    const nextVariants = [...variants, ...Array(urls.length).fill("")];
+  function coverScope(image: ImageVariantDraft): string {
+    if (image.variantId !== undefined) return `variant-${image.variantId}`;
 
-    updateOverride(product.id, {
-      images: [...images, ...urls],
-      variants: nextVariants,
+    const normalizedColorKey = colorKey(image.colorName);
+    return normalizedColorKey === "" ? image.key : `color-${normalizedColorKey}`;
+  }
+
+  function handleSetImageCover(key: string) {
+    setImageDrafts((current) => {
+      const selectedImage = current.find((image) => image.key === key);
+      if (!selectedImage) return current;
+
+      const selectedScope = coverScope(selectedImage);
+      return current.map((image) =>
+        coverScope(image) === selectedScope
+          ? { ...image, isCover: image.key === key }
+          : image,
+      );
     });
-  } catch (err) {
-    console.error("Error al subir mockups:", err);
-    alert("Error al subir las imágenes a Supabase.");
-  }
-}
-
-  function handleSetCover(index: number) {
-    if (!product || index === 0) return;
-    const next = [...images];
-    const nextVariants = [...variants];
-    const [chosen] = next.splice(index, 1);
-    const [chosenVariant] = nextVariants.splice(index, 1);
-    next.unshift(chosen);
-    nextVariants.unshift(chosenVariant);
-    updateOverride(product.id, { images: next, variants: nextVariants });
+    setVariantSaveError(null);
   }
 
-  function handleRemoveImage(index: number) {
-    if (!product) return;
-    const next = [...images];
-    const nextVariants = [...variants];
-    next.splice(index, 1);
-    nextVariants.splice(index, 1);
-    updateOverride(product.id, { images: next, variants: nextVariants });
+  function handleRemoveMockup(key: string) {
+    setImageDrafts((current) => current.filter((image) => image.key !== key));
+    setVariantSaveError(null);
   }
 
-  function handleVariantChange(index: number, value: string) {
-    if (!product) return;
-    const nextVariants = [...variants];
-    nextVariants[index] = value;
-    updateOverride(product.id, { variants: nextVariants });
+  function handleMockupColorChange(key: string, colorName: string) {
+    setImageDrafts((current) =>
+      current.map((image) => (image.key === key ? { ...image, colorName } : image)),
+    );
+    setVariantSaveError(null);
   }
+
+  async function handleSaveProductVariants() {
+    if (!product || isSavingVariants) return;
+
+    let nextProductVariants: ProductVariantTreeDraft[];
+    try {
+      nextProductVariants = buildProductVariantTree(
+        imageDrafts,
+        emptyVariants,
+        () => nextTemporaryVariantId.current--,
+      );
+      validateProductVariantTree(nextProductVariants);
+    } catch (error) {
+      console.error("No fue posible preparar las variantes de color:", error);
+      setVariantSaveError(
+        error instanceof Error
+          ? error.message
+          : "No fue posible preparar los colores y mockups.",
+      );
+      return;
+    }
+
+    try {
+      setIsSavingVariants(true);
+      setVariantSaveError(null);
+      await replaceProductVariants(product.id, nextProductVariants);
+      confirmedVariantsAwaitingSync.current = product.id;
+    } catch (error) {
+      console.error("No fue posible guardar las variantes de color:", error);
+      setVariantSaveError(
+        error instanceof Error
+          ? error.message
+          : "No fue posible guardar los colores y mockups. Inténtalo de nuevo.",
+      );
+      const confirmedDraft = buildImageDraftState(product);
+      setImageDrafts(confirmedDraft.imageDrafts);
+      setEmptyVariants(confirmedDraft.emptyVariants);
+      setImageDraftProductId(product.id);
+    } finally {
+      setIsSavingVariants(false);
+    }
+  }
+
+  const visibleImageDrafts = imageDraftProductId === product?.id ? imageDrafts : [];
+  const primaryImage =
+    visibleImageDrafts.find((image) => image.isCover)?.previewUrl ??
+    visibleImageDrafts[0]?.previewUrl ??
+    images[0];
 
   return (
     <AnimatePresence>
       {product && (
-        <div className="fixed inset-0 z-[85]" role="dialog" aria-modal="true" aria-label="Editor de producto">
+        <div
+          className="fixed inset-0 z-[85]"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Editor de producto"
+        >
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -158,7 +553,6 @@ export function EditorPanel() {
             transition={{ duration: 0.45, ease: EASE }}
             className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col border-l border-line bg-bg-soft"
           >
-            {/* Header */}
             <div className="flex items-center justify-between border-b border-line px-5 py-4">
               <div className="flex items-center gap-2">
                 <Pencil className="h-4 w-4 text-brand" />
@@ -173,15 +567,13 @@ export function EditorPanel() {
               </button>
             </div>
 
-            {/* Body */}
             <div className="flex-1 overflow-y-auto px-5 py-5">
-              {/* Imagen principal (portada) */}
               <p className={labelClass}>Imagen principal</p>
               <div className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-line bg-surface">
-                {images[0] ? (
+                {primaryImage ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={images[0]}
+                    src={primaryImage}
                     alt={name}
                     className="absolute inset-0 h-full w-full object-cover"
                   />
@@ -197,33 +589,33 @@ export function EditorPanel() {
                 </span>
               </div>
 
-              {/* Acciones de imagen */}
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => coverInputRef.current?.click()}
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-line bg-surface-2 px-4 text-sm font-medium text-ink transition hover:border-line-strong hover:bg-surface-3"
                 >
-                  <ImagePlus className="h-4 w-4" /> 🔥 CAMBIAR PORTADA 🔥
+                  <ImagePlus className="h-4 w-4" /> Cambiar portada
                 </button>
                 <button
                   type="button"
                   onClick={() => mockupsInputRef.current?.click()}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-bright"
+                  disabled={isUploadingMockups || isSavingVariants}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-bright disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <Images className="h-4 w-4" /> Agregar Mockups
+                  <Images className="h-4 w-4" />
+                  {isUploadingMockups ? "Subiendo…" : "Agregar Mockups"}
                 </button>
               </div>
 
-              {/* Inputs de archivo ocultos */}
               <input
                 ref={coverInputRef}
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={(e) => {
-                  void handleChangeCover(e.target.files);
-                  e.target.value = "";
+                onChange={(event) => {
+                  void handleChangeCover(event.target.files);
+                  event.target.value = "";
                 }}
               />
               <input
@@ -232,78 +624,90 @@ export function EditorPanel() {
                 accept="image/*"
                 multiple
                 className="hidden"
-                onChange={(e) => {
-                  void handleAddMockups(e.target.files);
-                  e.target.value = "";
+                onChange={(event) => {
+                  void handleAddMockups(event.target.files);
+                  event.target.value = "";
                 }}
               />
 
-              {/* Galería de miniaturas */}
-              {images.length > 0 && (
-                <div className="mt-5">
-                  <p className={labelClass}>
-                    Galería <span className="normal-case text-ink-faint">({images.length})</span>
-                  </p>
+              <div className="mt-5">
+                <p className={labelClass}>
+                  Galería{" "}
+                  <span className="normal-case text-ink-faint">
+                    ({visibleImageDrafts.length})
+                  </span>
+                </p>
+                <p className="mb-3 text-xs leading-relaxed text-ink-faint">
+                  Sube un mockup y escribe su color aquí. Los mockups con el mismo color se
+                  guardan dentro de una sola variante.
+                </p>
+
+                {visibleImageDrafts.length > 0 ? (
                   <div className="grid grid-cols-1 gap-3">
-                    {images.map((img, i) => (
+                    {visibleImageDrafts.map((image, index) => (
                       <div
-                        key={`${i}-${img.slice(0, 32)}`}
+                        key={image.key}
                         className={cn(
                           "flex gap-3 rounded-xl border bg-surface p-2 transition",
-                          i === 0 ? "border-brand" : "border-line",
+                          image.isCover ? "border-brand" : "border-line",
                         )}
                       >
-                        {/* Miniatura */}
                         <div className="group/thumb relative aspect-square h-24 shrink-0 overflow-hidden rounded-lg bg-surface-2">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={img}
-                            alt={`${name} — imagen ${i + 1}`}
-                            className="absolute inset-0 h-full w-full object-cover"
-                          />
-                          {i === 0 ? (
+                          {image.previewUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={image.previewUrl}
+                              alt={`${name} — imagen ${index + 1}`}
+                              className="absolute inset-0 h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="grid h-full place-items-center text-xs text-ink-faint">
+                              Sin vista previa
+                            </div>
+                          )}
+                          {image.isCover && (
                             <span className="absolute inset-x-1 bottom-1 flex items-center justify-center gap-1 rounded-full bg-brand/90 py-0.5 text-[0.52rem] font-semibold uppercase tracking-wider text-white">
                               <Star className="h-2.5 w-2.5 fill-white" /> Portada
                             </span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleSetCover(i)}
-                              className="absolute inset-x-1 bottom-1 flex items-center justify-center gap-1 rounded-full bg-black/70 py-0.5 text-[0.52rem] font-semibold uppercase tracking-wider text-ink-soft opacity-0 backdrop-blur transition-opacity duration-300 hover:text-white group-hover/thumb:opacity-100"
-                            >
-                              <Star className="h-2.5 w-2.5" /> Portada
-                            </button>
                           )}
                         </div>
 
-                        {/* Variante + acciones */}
                         <div className="flex flex-1 flex-col gap-1.5">
                           <div>
-                            <label className="mb-1 block text-[0.62rem] uppercase tracking-wider text-ink-faint">
-                              Variante
+                            <label
+                              htmlFor={`editor-mockup-color-${image.key}`}
+                              className="mb-1 block text-[0.62rem] uppercase tracking-wider text-ink-faint"
+                            >
+                              Variante / color
                             </label>
                             <input
+                              id={`editor-mockup-color-${image.key}`}
                               type="text"
-                              value={variants[i] ?? ""}
-                              onChange={(e) => handleVariantChange(i, e.target.value)}
-                              placeholder="Ej: Negro, Rojo, Blanco…"
-                              className="h-9 w-full rounded-lg border border-line bg-bg px-3 text-sm text-ink outline-none transition focus:border-brand placeholder:text-ink-faint"
+                              value={image.colorName}
+                              onChange={(event) =>
+                                handleMockupColorChange(image.key, event.target.value)
+                              }
+                              disabled={isSavingVariants}
+                              placeholder="Ej: Negro, Blanco, Gris…"
+                              className="h-9 w-full rounded-lg border border-line bg-bg px-3 text-sm text-ink outline-none transition focus:border-brand placeholder:text-ink-faint disabled:cursor-not-allowed disabled:opacity-60"
                             />
                           </div>
                           <div className="flex items-center gap-2">
-                            {i !== 0 && (
+                            {!image.isCover && (
                               <button
                                 type="button"
-                                onClick={() => handleSetCover(i)}
-                                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[0.62rem] text-ink-muted transition hover:text-brand"
+                                onClick={() => handleSetImageCover(image.key)}
+                                disabled={isSavingVariants}
+                                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[0.62rem] text-ink-muted transition hover:text-brand disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 <Star className="h-3 w-3" /> Portada
                               </button>
                             )}
                             <button
                               type="button"
-                              onClick={() => handleRemoveImage(i)}
-                              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[0.62rem] text-ink-muted transition hover:text-brand"
+                              onClick={() => handleRemoveMockup(image.key)}
+                              disabled={isSavingVariants}
+                              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[0.62rem] text-ink-muted transition hover:text-brand disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               <Trash2 className="h-3 w-3" /> Eliminar
                             </button>
@@ -312,17 +716,38 @@ export function EditorPanel() {
                       </div>
                     ))}
                   </div>
-                </div>
+                ) : (
+                  <p className="rounded-xl border border-dashed border-line px-3 py-4 text-center text-xs text-ink-faint">
+                    Agrega mockups para asignarles un color.
+                  </p>
+                )}
+              </div>
+
+              {variantSaveError && (
+                <p
+                  role="alert"
+                  className="mt-4 rounded-xl border border-brand/30 bg-brand-soft px-3 py-2 text-xs leading-relaxed text-brand"
+                >
+                  {variantSaveError}
+                </p>
               )}
 
-              {/* Campos del producto */}
+              <button
+                type="button"
+                onClick={() => void handleSaveProductVariants()}
+                disabled={isSavingVariants || isUploadingMockups}
+                className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-bright disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSavingVariants ? "Guardando colores y mockups…" : "Guardar colores y mockups"}
+              </button>
+
               <div className="mt-6 space-y-4 border-t border-line pt-5">
                 <div>
                   <label htmlFor="editor-name" className={labelClass}>Nombre</label>
                   <input
                     id="editor-name"
                     value={name}
-                    onChange={(e) => updateOverride(product.id, { name: e.target.value })}
+                    onChange={(event) => updateOverride(product.id, { name: event.target.value })}
                     className={inputClass}
                   />
                 </div>
@@ -336,11 +761,11 @@ export function EditorPanel() {
                       step="0.01"
                       inputMode="decimal"
                       value={priceText}
-                      onChange={(e) => {
-                        setPriceText(e.target.value);
-                        const n = parseFloat(e.target.value);
-                        if (Number.isFinite(n) && n >= 0) {
-                          updateOverride(product.id, { price: n });
+                      onChange={(event) => {
+                        setPriceText(event.target.value);
+                        const nextPrice = parseFloat(event.target.value);
+                        if (Number.isFinite(nextPrice) && nextPrice >= 0) {
+                          updateOverride(product.id, { price: nextPrice });
                         }
                       }}
                       className={inputClass}
@@ -351,7 +776,7 @@ export function EditorPanel() {
                     <input
                       id="editor-type"
                       value={type}
-                      onChange={(e) => updateOverride(product.id, { type: e.target.value })}
+                      onChange={(event) => updateOverride(product.id, { type: event.target.value })}
                       placeholder="Camiseta, Hoodie…"
                       className={inputClass}
                     />
@@ -362,9 +787,9 @@ export function EditorPanel() {
                   <select
                     id="editor-status"
                     value={status}
-                    onChange={(e) =>
+                    onChange={(event) =>
                       updateOverride(product.id, {
-                        status: e.target.value as typeof status,
+                        status: event.target.value as typeof status,
                       })
                     }
                     className={inputClass}
@@ -381,7 +806,9 @@ export function EditorPanel() {
                     id="editor-description"
                     rows={4}
                     value={description}
-                    onChange={(e) => updateOverride(product.id, { description: e.target.value })}
+                    onChange={(event) =>
+                      updateOverride(product.id, { description: event.target.value })
+                    }
                     className="w-full rounded-xl border border-line bg-bg px-4 py-3 text-ink outline-none transition focus:border-brand placeholder:text-ink-faint"
                   />
                 </div>
@@ -399,10 +826,10 @@ export function EditorPanel() {
               </div>
             </div>
 
-            {/* Footer */}
             <div className="border-t border-line px-5 py-4">
               <p className="text-center text-[0.7rem] leading-relaxed text-ink-faint">
-                Los cambios se guardan automáticamente en este dispositivo (Modo Editor).
+                Los cambios generales se guardan automáticamente. Los colores y mockups requieren
+                guardar.
               </p>
             </div>
           </motion.aside>

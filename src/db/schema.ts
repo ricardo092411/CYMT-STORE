@@ -16,6 +16,7 @@
  *  - `clubMembers`  → persists Club CYMT signups from /api/club
  */
 
+import { sql } from "drizzle-orm";
 import {
   boolean,
   integer,
@@ -25,6 +26,7 @@ import {
   serial,
   text,
   timestamp,
+  uniqueIndex,
   varchar,
 } from "drizzle-orm/pg-core";
 
@@ -67,6 +69,55 @@ export const products = pgTable("products", {
   tags: jsonb("tags").$type<string[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+/* ------------------------ Product variants ----------------------- */
+
+export const productVariants = pgTable(
+  "product_variants",
+  {
+    id: serial("id").primaryKey(),
+    productId: integer("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    colorName: varchar("color_name", { length: 80 }),
+    colorHex: varchar("color_hex", { length: 16 }),
+    colorStatus: varchar("color_status", { length: 40 }).default("requires_user_input").notNull(),
+    position: integer("position").notNull(),
+    isDefault: boolean("is_default").default(false).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("product_variants_product_id_position_unique").on(table.productId, table.position),
+    uniqueIndex("product_variants_default_per_product_unique")
+      .on(table.productId)
+      .where(sql`${table.isDefault} = true`),
+  ],
+);
+
+/* ------------------------- Product images ------------------------ */
+
+export const productImages = pgTable(
+  "product_images",
+  {
+    id: serial("id").primaryKey(),
+    productVariantId: integer("product_variant_id")
+      .notNull()
+      .references(() => productVariants.id, { onDelete: "cascade" }),
+    storageKey: text("storage_key"),
+    legacyUrl: text("legacy_url"),
+    originalFilename: text("original_filename").notNull(),
+    originalSourcePath: text("original_source_path"),
+    position: integer("position").notNull(),
+    isCover: boolean("is_cover").default(false).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("product_images_variant_id_position_unique").on(table.productVariantId, table.position),
+    uniqueIndex("product_images_cover_per_variant_unique")
+      .on(table.productVariantId)
+      .where(sql`${table.isCover} = true`),
+  ],
+);
 
 /* --------------------------- Club CYMT --------------------------- */
 

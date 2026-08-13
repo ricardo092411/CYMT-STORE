@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { Heart, Check, Truck, ShieldCheck, Pencil } from "lucide-react";
@@ -14,8 +14,57 @@ import { EDIT_MODE } from "@/config/edit-mode";
 import { site } from "@/data/site";
 import { getDrop, type Product } from "@/data/catalog";
 import { cn, safeCartImage } from "@/lib/utils";
+import { getProductImagePublicUrl } from "@/lib/storage";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
+type RelationalGalleryImage = {
+  key: string;
+  variantId: number;
+  colorName: string | null;
+  colorHex: string | null;
+  src: string;
+  isCover: boolean;
+};
+
+function buildRelationalGallery(productVariants: Product["productVariants"]): {
+  images: RelationalGalleryImage[];
+  initialImageKey: string | null;
+} {
+  const variantsWithImages = [...(productVariants ?? [])]
+    .sort((left, right) => left.position - right.position)
+    .map((variant) => ({
+      variant,
+      images: [...variant.images]
+        .sort((left, right) => left.position - right.position)
+        .flatMap((image) => {
+          const src = image.storageKey
+            ? getProductImagePublicUrl(image.storageKey)
+            : image.legacyUrl;
+          if (!src) return [];
+
+          return [{
+            key: `variant-${variant.id}-image-${image.id}`,
+            variantId: variant.id,
+            colorName: variant.colorName,
+            colorHex: variant.colorHex,
+            src,
+            isCover: image.isCover,
+          }];
+        }),
+    }))
+    .filter((entry) => entry.images.length > 0);
+
+  const initialVariant =
+    variantsWithImages.find((entry) => entry.variant.isDefault) ?? variantsWithImages[0];
+  const initialImage =
+    initialVariant?.images.find((image) => image.isCover) ?? initialVariant?.images[0];
+
+  return {
+    images: variantsWithImages.flatMap((entry) => entry.images),
+    initialImageKey: initialImage?.key ?? null,
+  };
+}
 
 export function ProductDetail({ product: baseProduct, related }: { product: Product; related: Product[] }) {
   const { addToCart, toggleFavorite, isFavorite } = useStore();
@@ -26,13 +75,29 @@ export function ProductDetail({ product: baseProduct, related }: { product: Prod
 
   const singleSize = product.sizes.length === 1;
   const [activeImg, setActiveImg] = useState(0);
+  const [activeRelationalImageKey, setActiveRelationalImageKey] = useState<string | null>(null);
   const [size, setSize] = useState<string | null>(singleSize ? product.sizes[0] : null);
   const [qty, setQty] = useState(1);
 
-  /* La variante se deriva del mockup activo: si el editor definió una para
-     esa imagen, se usa; si no, se hace fallback al catálogo original. */
+  const relationalGallery = useMemo(
+    () => buildRelationalGallery(product.productVariants),
+    [product.productVariants],
+  );
+  const usesRelationalGallery = relationalGallery.images.length > 0;
+  const activeRelationalImage =
+    relationalGallery.images.find((image) => image.key === activeRelationalImageKey) ??
+    relationalGallery.images.find((image) => image.key === relationalGallery.initialImageKey);
+  const activeLegacyImageIndex = Math.min(activeImg, Math.max(0, product.images.length - 1));
+
+  useEffect(() => {
+    setActiveRelationalImageKey(relationalGallery.initialImageKey);
+  }, [product.id, relationalGallery.initialImageKey]);
+
+  /* La variante se deriva de la imagen activa. Las relaciones persistidas
+     tienen prioridad; el comportamiento legacy sigue siendo el fallback. */
   const currentVariant =
-    product.variants?.[activeImg]?.trim() ||
+    activeRelationalImage?.colorName?.trim() ||
+    product.variants?.[activeLegacyImageIndex]?.trim() ||
     product.colors[0]?.name ||
     "Única";
 
@@ -48,7 +113,9 @@ export function ProductDetail({ product: baseProduct, related }: { product: Prod
       name: product.name,
       type: product.type,
       /* Imagen del mockup activo → representa visualmente la variante elegida */
-      image: safeCartImage(product.images[activeImg] ?? product.images[0]),
+      image: safeCartImage(
+        activeRelationalImage?.src ?? product.images[activeLegacyImageIndex] ?? product.images[0],
+      ),
       price: product.price,
       /* La variante seleccionada viaja al carrito y luego al mensaje de WhatsApp */
       color: currentVariant,
@@ -79,38 +146,77 @@ export function ProductDetail({ product: baseProduct, related }: { product: Prod
             {/* Transición suave al cambiar de imagen — controlada por el usuario */}
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.div
-                key={Math.min(activeImg, Math.max(0, product.images.length - 1))}
+                key={activeRelationalImage?.key ?? `legacy-${activeLegacyImageIndex}`}
                 initial={{ opacity: 0, scale: 1.015 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.45, ease: EASE }}
                 className="absolute inset-0"
               >
-                <ProductImage
-                  product={product}
-                  index={Math.min(activeImg, Math.max(0, product.images.length - 1))}
-                  className="h-full w-full"
-                  sizes="(max-width: 1024px) 100vw, 50vw"
-                  priority
-                />
+                {usesRelationalGallery && activeRelationalImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={activeRelationalImage.src}
+                    alt={`${product.name} — ${activeRelationalImage.colorName ?? "variante"}`}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <ProductImage
+                    product={product}
+                    index={activeLegacyImageIndex}
+                    className="h-full w-full"
+                    sizes="(max-width: 1024px) 100vw, 50vw"
+                    priority
+                  />
+                )}
               </motion.div>
             </AnimatePresence>
           </div>
-          {product.images.length > 1 && (
-            <div className="flex gap-3">
-              {product.images.map((img, i) => (
-                <button
-                  key={`${i}-${img.slice(0, 40)}`}
-                  onClick={() => setActiveImg(i)}
-                  className={cn(
-                    "relative aspect-square w-20 overflow-hidden rounded-xl border bg-surface transition",
-                    activeImg === i ? "border-brand" : "border-line hover:border-line-strong",
-                  )}
-                >
-                  <ProductImage product={product} index={i} className="h-full w-full" sizes="80px" />
-                </button>
-              ))}
-            </div>
+          {usesRelationalGallery ? (
+            relationalGallery.images.length > 1 && (
+              <div className="flex gap-3">
+                {relationalGallery.images.map((image) => (
+                  <button
+                    key={image.key}
+                    type="button"
+                    onClick={() => setActiveRelationalImageKey(image.key)}
+                    aria-label={`Mostrar variante ${image.colorName ?? "sin color"}`}
+                    title={image.colorName ?? "Variante"}
+                    className={cn(
+                      "relative aspect-square w-20 overflow-hidden rounded-xl border bg-surface transition duration-300 hover:scale-[1.03]",
+                      activeRelationalImage?.key === image.key
+                        ? "border-brand"
+                        : "border-line hover:border-line-strong",
+                    )}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={image.src}
+                      alt={`${product.name} — ${image.colorName ?? "variante"}`}
+                      className="h-full w-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            )
+          ) : (
+            product.images.length > 1 && (
+              <div className="flex gap-3">
+                {product.images.map((img, i) => (
+                  <button
+                    key={`${i}-${img.slice(0, 40)}`}
+                    type="button"
+                    onClick={() => setActiveImg(i)}
+                    className={cn(
+                      "relative aspect-square w-20 overflow-hidden rounded-xl border bg-surface transition duration-300 hover:scale-[1.03]",
+                      activeImg === i ? "border-brand" : "border-line hover:border-line-strong",
+                    )}
+                  >
+                    <ProductImage product={product} index={i} className="h-full w-full" sizes="80px" />
+                  </button>
+                ))}
+              </div>
+            )
           )}
         </div>
 
@@ -154,6 +260,13 @@ export function ProductDetail({ product: baseProduct, related }: { product: Prod
           <div className="mt-7">
             <p className="text-xs uppercase tracking-wider text-ink-muted">
               Variante: <span className="text-ink">{currentVariant}</span>
+              {activeRelationalImage?.colorHex && (
+                <span
+                  aria-label={`Color ${currentVariant}`}
+                  className="ml-2 inline-block h-3 w-3 rounded-full border border-line align-middle"
+                  style={{ backgroundColor: activeRelationalImage.colorHex }}
+                />
+              )}
             </p>
             <p className="mt-1 text-[0.72rem] text-ink-faint">
               Selecciona una miniatura para elegir la variante deseada.
@@ -250,5 +363,3 @@ export function ProductDetail({ product: baseProduct, related }: { product: Prod
     </Container>
   );
 }
-
-

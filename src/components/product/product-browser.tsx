@@ -6,8 +6,6 @@ import { SlidersHorizontal, Search, X, Plus } from "lucide-react";
 import { ProductCard } from "./product-card";
 import { Container } from "@/components/ui";
 import {
-  allSizes,
-  allTypes,
   drops as allDrops,
   type Drop,
   type Product,
@@ -40,7 +38,6 @@ const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
  * Si se pasa `scopedDrop`, solo muestra productos de esa colección.
  */
 export function ProductBrowser({
-  products: initialProducts,
   scopedDrop,
 }: {
   products?: Product[];
@@ -50,9 +47,8 @@ export function ProductBrowser({
   const { createProduct, enabled } = useEditor();
 
   const products = useMemo(() => {
-    const source = liveProducts.length > 0 ? liveProducts : (initialProducts ?? []);
-    return scopedDrop ? source.filter((p) => p.dropSlug === scopedDrop.slug) : source;
-  }, [liveProducts, initialProducts, scopedDrop]);
+    return scopedDrop ? liveProducts.filter((p) => p.dropSlug === scopedDrop.slug) : liveProducts;
+  }, [liveProducts, scopedDrop]);
 
   const [query, setQuery] = useState("");
   const [dropsSel, setDropsSel] = useState<string[]>([]);
@@ -76,13 +72,11 @@ export function ProductBrowser({
   }, [products]);
 
   const availableTypes = useMemo(() => {
-    const fromLive = Array.from(new Set(products.map((p) => p.type)));
-    return fromLive.length > 0 ? fromLive : allTypes;
+    return Array.from(new Set(products.map((p) => p.type)));
   }, [products]);
 
   const availableSizes = useMemo(() => {
-    const fromLive = Array.from(new Set(products.flatMap((p) => p.sizes)));
-    return fromLive.length > 0 ? fromLive : allSizes;
+    return Array.from(new Set(products.flatMap((p) => p.sizes)));
   }, [products]);
 
   const toggle = (setter: React.Dispatch<React.SetStateAction<string[]>>, arr: string[], v: string) =>

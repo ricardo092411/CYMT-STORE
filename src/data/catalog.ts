@@ -20,6 +20,30 @@ export interface ProductColor {
   hex: string;
 }
 
+export interface ProductVariantImage {
+  id: number;
+  productVariantId: number;
+  storageKey: string | null;
+  legacyUrl: string | null;
+  originalFilename: string;
+  originalSourcePath: string | null;
+  position: number;
+  isCover: boolean;
+  createdAt: string;
+}
+
+export interface ProductVariant {
+  id: number;
+  productId: number;
+  colorName: string | null;
+  colorHex: string | null;
+  colorStatus: string;
+  position: number;
+  isDefault: boolean;
+  createdAt: string;
+  images: ProductVariantImage[];
+}
+
 export interface Product {
   id: string;
   slug: string;
@@ -38,6 +62,8 @@ export interface Product {
   stock: number;
   /** Local image paths under /public. Empty array → elegant branded tile. */
   images: string[];
+  /** Persisted relational variants received from the product API. */
+  productVariants?: ProductVariant[];
   /**
    * Variantes por mockup (array paralelo a `images`).
    * Cada mockup puede tener su propia variante editable (ej: "Negro", "Rojo").

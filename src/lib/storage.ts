@@ -1,31 +1,58 @@
 import { supabase } from "./supabase";
 
-export async function uploadImage(file: File): Promise<string> {
+const PRODUCT_IMAGES_BUCKET = "product-images";
+
+export type UploadedProductImage = {
+  storageKey: string;
+  publicUrl: string;
+  originalFilename: string;
+};
+
+export function getProductImagePublicUrl(storageKey: string): string {
+  const { data } = supabase.storage
+    .from(PRODUCT_IMAGES_BUCKET)
+    .getPublicUrl(storageKey);
+
+  return data.publicUrl;
+}
+
+export async function uploadProductImage(file: File): Promise<UploadedProductImage> {
   const extension = file.name.split(".").pop();
-  const fileName = `${crypto.randomUUID()}.${extension}`;
+  const storageKey = `${crypto.randomUUID()}.${extension}`;
 
   const { error } = await supabase.storage
-    .from("product-images")
-    .upload(fileName, file);
+    .from(PRODUCT_IMAGES_BUCKET)
+    .upload(storageKey, file);
 
   if (error) {
     throw error;
   }
 
-  const { data } = supabase.storage
-    .from("product-images")
-    .getPublicUrl(fileName);
+  return {
+    storageKey,
+    publicUrl: getProductImagePublicUrl(storageKey),
+    originalFilename: file.name,
+  };
+}
 
-  return data.publicUrl;
+export async function uploadProductImages(files: FileList): Promise<UploadedProductImage[]> {
+  const uploadedImages: UploadedProductImage[] = [];
+
+  for (const file of Array.from(files)) {
+    uploadedImages.push(await uploadProductImage(file));
+  }
+
+  return uploadedImages;
+}
+
+export async function uploadImage(file: File): Promise<string> {
+  const uploadedImage = await uploadProductImage(file);
+
+  return uploadedImage.publicUrl;
 }
 
 export async function uploadImages(files: FileList): Promise<string[]> {
-  const urls: string[] = [];
+  const uploadedImages = await uploadProductImages(files);
 
-  for (const file of Array.from(files)) {
-    const url = await uploadImage(file);
-    urls.push(url);
-  }
-
-  return urls;
+  return uploadedImages.map((image) => image.publicUrl);
 }
