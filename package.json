@@ -6,7 +6,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "import:product-library": "tsx scripts/import-product-library.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.9",

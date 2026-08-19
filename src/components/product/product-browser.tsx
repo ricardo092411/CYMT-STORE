@@ -13,6 +13,7 @@ import {
 import { useEditor, useLiveProducts } from "@/providers/editor-provider";
 import { EDIT_MODE } from "@/config/edit-mode";
 import { cn } from "@/lib/utils";
+import { getStorefrontProductMedia } from "@/lib/product-media";
 
 type SortKey = "featured" | "new" | "price-asc" | "price-desc";
 
@@ -63,9 +64,8 @@ export function ProductBrowser({
   const availableVariants = useMemo(() => {
     const set = new Set<string>();
     for (const p of products) {
-      for (const v of p.variants ?? []) {
-        const t = v?.trim();
-        if (t) set.add(t);
+      for (const color of getStorefrontProductMedia(p).filterColors) {
+        set.add(color);
       }
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
@@ -88,7 +88,7 @@ export function ProductBrowser({
     const list = products.filter((p) => {
       if (
         q &&
-        ![p.name, p.type, p.description, p.dropSlug, ...(p.tags ?? []), ...(p.variants ?? [])]
+        [p.name, p.type, p.description, p.dropSlug, ...(p.tags ?? []), ...getStorefrontProductMedia(p).filterColors]
           .join(" ")
           .toLowerCase()
           .includes(q)
@@ -98,7 +98,7 @@ export function ProductBrowser({
       if (typesSel.length > 0 && !typesSel.includes(p.type)) return false;
       if (
         variantsSel.length > 0 &&
-        !(p.variants ?? []).some((v) => variantsSel.includes(v.trim()))
+        !getStorefrontProductMedia(p).filterColors.some((color) => variantsSel.includes(color))
       )
         return false;
       if (sizesSel.length > 0 && !p.sizes.some((s) => sizesSel.includes(s))) return false;

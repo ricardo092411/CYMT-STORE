@@ -8,6 +8,7 @@ import { Search, X } from "lucide-react";
 import { useStore } from "@/providers/store-provider";
 import { useLiveProducts } from "@/providers/editor-provider";
 import { Price } from "@/components/ui";
+import { getStorefrontProductMedia, usesDirectProductImageElement } from "@/lib/product-media";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -26,7 +27,7 @@ export function SearchOverlay() {
     if (!q) return [];
     return products
       .filter((p) =>
-        [p.name, p.type, p.description, p.dropSlug, ...(p.tags ?? []), ...(p.variants ?? [])]
+        [p.name, p.type, p.description, p.dropSlug, ...(p.tags ?? []), ...getStorefrontProductMedia(p).filterColors]
           .join(" ")
           .toLowerCase()
           .includes(q),
@@ -102,30 +103,39 @@ export function SearchOverlay() {
 
                 {results.length > 0 && (
                   <ul className="flex flex-col">
-                    {results.map((p) => (
-                      <li key={p.id}>
-                        <Link
-                          href={`/producto/${p.slug}`}
-                          onClick={() => setSearchOpen(false)}
-                          className="flex items-center gap-4 rounded-xl px-2 py-2.5 transition hover:bg-surface-2"
-                        >
-                          <div className="relative h-16 w-14 shrink-0 overflow-hidden rounded-lg border border-line bg-surface">
-                            {p.images[0] ? (
-                              <Image src={p.images[0]} alt={p.name} fill sizes="56px" className="object-cover" />
-                            ) : (
-                              <div className="grid h-full w-full place-items-center bg-gradient-to-br from-surface-2 to-bg font-display text-xl font-bold text-ink/80">
-                                {p.name.charAt(0)}
-                              </div>
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate font-medium text-ink">{p.name}</p>
-                            <p className="text-xs uppercase tracking-wider text-ink-faint">{p.type}</p>
-                          </div>
-                          <Price price={p.price} compareAtPrice={p.compareAtPrice} />
-                        </Link>
-                      </li>
-                    ))}
+                    {results.map((p) => {
+                      const image = getStorefrontProductMedia(p).primaryImage;
+
+                      return (
+                        <li key={p.id}>
+                          <Link
+                            href={`/producto/${p.slug}`}
+                            onClick={() => setSearchOpen(false)}
+                            className="flex items-center gap-4 rounded-xl px-2 py-2.5 transition hover:bg-surface-2"
+                          >
+                            <div className="relative h-16 w-14 shrink-0 overflow-hidden rounded-lg border border-line bg-surface">
+                              {image ? (
+                                usesDirectProductImageElement(image.src) ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={image.src} alt={p.name} className="h-full w-full object-cover" />
+                                ) : (
+                                  <Image src={image.src} alt={p.name} fill sizes="56px" className="object-cover" />
+                                )
+                              ) : (
+                                <div className="grid h-full w-full place-items-center bg-gradient-to-br from-surface-2 to-bg font-display text-xl font-bold text-ink/80">
+                                  {p.name.charAt(0)}
+                                </div>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate font-medium text-ink">{p.name}</p>
+                              <p className="text-xs uppercase tracking-wider text-ink-faint">{p.type}</p>
+                            </div>
+                            <Price price={p.price} compareAtPrice={p.compareAtPrice} />
+                          </Link>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </div>

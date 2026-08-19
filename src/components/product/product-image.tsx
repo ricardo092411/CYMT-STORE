@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { cn } from "@/lib/utils";
+import { getStorefrontProductMedia, usesDirectProductImageElement } from "@/lib/product-media";
 import type { Product } from "@/data/catalog";
 
 /**
@@ -23,12 +24,15 @@ export function ProductImage({
   sizes?: string;
   priority?: boolean;
 }) {
-  const src = product.images[index];
+  const media = getStorefrontProductMedia(product);
+  const src = media.usesRelationalMedia
+    ? (index === 0 ? media.primaryImage?.src : media.images[index]?.src ?? media.primaryImage?.src)
+    : product.images[index];
 
   // Imágenes locales del Modo Editor (data/blob URLs): next/image no las
   // soporta, así que se renderizan con <img> nativo. Las rutas normales de
   // /public siguen usando next/image exactamente igual que antes.
-  if (src && (src.startsWith("data:") || src.startsWith("blob:"))) {
+  if (src && usesDirectProductImageElement(src)) {
     return (
       <div className={cn("relative overflow-hidden bg-surface", className)}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -56,13 +60,21 @@ export function ProductImage({
     );
   }
 
-  return <ProductFallback product={product} className={className} />;
+  return <ProductFallback product={product} accent={media.colors[0]?.hex} className={className} />;
 }
 
-function ProductFallback({ product, className }: { product: Product; className?: string }) {
+function ProductFallback({
+  product,
+  accent,
+  className,
+}: {
+  product: Product;
+  accent: string | null | undefined;
+  className?: string;
+}) {
   /* El sistema de variantes ya no depende de círculos de color;
      el acento visual del fallback sigue usando un tono de marca estable. */
-  const accent = product.colors[0]?.hex ?? "#e50914";
+  const fallbackAccent = accent ?? "#e50914";
   const initial = product.name.trim().charAt(0).toUpperCase() || "C";
 
   return (
@@ -74,11 +86,11 @@ function ProductFallback({ product, className }: { product: Product; className?:
     >
       <div
         className="absolute -inset-12 opacity-50"
-        style={{ background: `radial-gradient(circle at 28% 18%, ${accent}40, transparent 60%)` }}
+        style={{ background: `radial-gradient(circle at 28% 18%, ${fallbackAccent}40, transparent 60%)` }}
       />
       <div
         className="absolute -bottom-16 -right-10 h-40 w-40 rounded-full opacity-30 blur-2xl"
-        style={{ background: accent }}
+        style={{ background: fallbackAccent }}
       />
       <div className="relative px-4 text-center">
         <span className="block font-display text-[5.5rem] font-bold leading-none text-ink/90">

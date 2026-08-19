@@ -8,6 +8,7 @@ import { useStore } from "@/providers/store-provider";
 import { useEditedProduct, useEditor } from "@/providers/editor-provider";
 import { EDIT_MODE } from "@/config/edit-mode";
 import { cn, safeCartImage } from "@/lib/utils";
+import { getStorefrontProductMedia } from "@/lib/product-media";
 import type { Product } from "@/data/catalog";
 
 /**
@@ -23,6 +24,8 @@ export function ProductCard({ product: baseProduct, priority }: { product: Produ
   const fav = isFavorite(product.id);
   const soldOut = product.status === "agotado";
   const quickAddable = product.sizes.length === 1 && !soldOut;
+  const media = getStorefrontProductMedia(product);
+  const quickAddImage = media.usesRelationalMedia ? media.primaryImage?.src : product.images[0];
 
   function handleFavorite(e: React.MouseEvent) {
     e.preventDefault();
@@ -38,9 +41,9 @@ export function ProductCard({ product: baseProduct, priority }: { product: Produ
       slug: product.slug,
       name: product.name,
       type: product.type,
-      image: safeCartImage(product.images[0]),
+      image: safeCartImage(quickAddImage),
       price: product.price,
-      color: product.variants?.[0]?.trim() || product.colors[0]?.name || "Única",
+      color: media.primaryColor ?? "Única",
       size: product.sizes[0],
       quantity: 1,
     });
