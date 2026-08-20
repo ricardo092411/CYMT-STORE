@@ -6,9 +6,9 @@ import { ProductImage } from "./product-image";
 import { Price, StatusBadge } from "@/components/ui";
 import { useStore } from "@/providers/store-provider";
 import { useEditedProduct, useEditor } from "@/providers/editor-provider";
-import { EDIT_MODE } from "@/config/edit-mode";
 import { cn, safeCartImage } from "@/lib/utils";
 import { getStorefrontProductMedia } from "@/lib/product-media";
+import { getAvailableProductSizes } from "@/lib/product-sizes";
 import type { Product } from "@/data/catalog";
 
 /**
@@ -18,12 +18,12 @@ import type { Product } from "@/data/catalog";
  */
 export function ProductCard({ product: baseProduct, priority }: { product: Product; priority?: boolean }) {
   const { toggleFavorite, isFavorite, addToCart } = useStore();
-  const { openEditor } = useEditor();
-  /* Modo Editor: fusiona overrides del admin (sin EDIT_MODE devuelve el original). */
+  const { openEditor, enabled } = useEditor();
   const product = useEditedProduct(baseProduct);
   const fav = isFavorite(product.id);
   const soldOut = product.status === "agotado";
-  const quickAddable = product.sizes.length === 1 && !soldOut;
+  const availableSizes = getAvailableProductSizes(product.sizes);
+  const quickAddable = availableSizes.length === 1 && !soldOut;
   const media = getStorefrontProductMedia(product);
   const quickAddImage = media.usesRelationalMedia ? media.primaryImage?.src : product.images[0];
 
@@ -36,6 +36,9 @@ export function ProductCard({ product: baseProduct, priority }: { product: Produ
   function handleQuickAdd(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+    const size = availableSizes[0];
+    if (!size) return;
+
     addToCart({
       productId: product.id,
       slug: product.slug,
@@ -44,7 +47,7 @@ export function ProductCard({ product: baseProduct, priority }: { product: Produ
       image: safeCartImage(quickAddImage),
       price: product.price,
       color: media.primaryColor ?? "Única",
-      size: product.sizes[0],
+      size,
       quantity: 1,
     });
   }
@@ -83,7 +86,7 @@ export function ProductCard({ product: baseProduct, priority }: { product: Produ
             </button>
 
             {/* MODO EDITOR — botón discreto, solo visible para el admin */}
-            {EDIT_MODE && (
+            {enabled && (
               <button
                 type="button"
                 onClick={handleEdit}

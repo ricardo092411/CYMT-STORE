@@ -9,7 +9,7 @@
  * - productos eliminados (soft-delete sobre el catálogo base)
  *
  * Persistido en localStorage — mismo patrón que carrito y favoritos.
- * Con EDIT_MODE = false queda inerte: cero herramientas, catálogo original.
+ * Los controles solo se habilitan bajo /admin; el catálogo vivo sigue global.
  */
 
 import {
@@ -22,6 +22,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { usePathname } from "next/navigation";
 import { EDIT_MODE } from "@/config/edit-mode";
 import {
   type Product,
@@ -46,6 +47,7 @@ export interface ProductOverride {
 }
 
 type OverridesMap = Record<string, ProductOverride>;
+const EMPTY_OVERRIDES: OverridesMap = {};
 
 type ProductVariantImageReplacement = Omit<
   ProductVariantImage,
@@ -685,6 +687,8 @@ function toDatabaseId(id: string): number | null {
 }
 
 export function EditorProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const enabled = EDIT_MODE && pathname.startsWith("/admin");
   const [logoSrc, setLogoSrc] = useState<string | null>(null);
   const [databaseProducts, setDatabaseProducts] = useState<Product[]>([]);
   const databaseProductsRef = useRef<Product[]>([]);
@@ -693,6 +697,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   const [overrides, setOverrides] = useState<OverridesMap>({});
   const [activeId, setActiveId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const adminStateReadyToPersistRef = useRef(false);
   const productMutationQueues = useRef<Record<string, Promise<void>>>({});
 
   const updateDatabaseProducts = useCallback((updater: ProductListUpdater) => {
@@ -705,9 +710,9 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     persistedProductsRef.current = replaceProduct(persistedProductsRef.current, productId, product);
   }, []);
 
-  /* Cargar estado guardado (solo en modo editor) */
+  /* Cargar estado guardado solo dentro de la ruta administrativa. */
   useEffect(() => {
-    if (!EDIT_MODE) {
+    if (!enabled) {
       setHydrated(true);
       return;
     }
@@ -728,7 +733,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       /* storage corrupto → ignorar */
     }
     setHydrated(true);
-  }, []);
+  }, [enabled]);
 
   /* Cargar el catálogo base desde PostgreSQL mediante la API existente. */
   useEffect(() => {
@@ -756,48 +761,58 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
   /* Persistir cambios */
   useEffect(() => {
-    if (!EDIT_MODE || !hydrated) return;
+    if (!enabled || !hydrated) {
+      adminStateReadyToPersistRef.current = false;
+      return;
+    }
+    if (!adminStateReadyToPersistRef.current) {
+      adminStateReadyToPersistRef.current = true;
+      return;
+    }
     try {
       const payload: PersistedState = { logoSrc, overrides };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {
       /* cuota llena → los cambios siguen vivos en memoria */
     }
-  }, [logoSrc, overrides, hydrated]);
+  }, [enabled, logoSrc, overrides, hydrated]);
 
   /* Bloquear scroll mientras el panel está abierto */
   useEffect(() => {
-    if (!EDIT_MODE) return;
+    if (!enabled) {
+      document.body.style.overflow = "";
+      return;
+    }
     if (activeId) document.body.style.overflow = "hidden";
     return () => {
       if (activeId) document.body.style.overflow = "";
     };
-  }, [activeId]);
+  }, [activeId, enabled]);
 
   /* Esc cierra el panel */
   useEffect(() => {
-    if (!EDIT_MODE || !activeId) return;
+    if (!enabled || !activeId) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setActiveId(null);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeId]);
+  }, [activeId, enabled]);
 
   const liveProducts = useMemo(
-    () => buildLiveCatalog(databaseProducts, overrides),
-    [databaseProducts, overrides],
+    () => buildLiveCatalog(databaseProducts, enabled ? overrides : EMPTY_OVERRIDES),
+    [databaseProducts, enabled, overrides],
   );
 
   const openEditor = useCallback((productId: string) => {
-    if (EDIT_MODE) setActiveId(productId);
-  }, []);
+    if (enabled) setActiveId(productId);
+  }, [enabled]);
 
   const closeEditor = useCallback(() => setActiveId(null), []);
 
   const updateLogo = useCallback((src: string | null) => {
-    if (EDIT_MODE) setLogoSrc(src);
-  }, []);
+    if (enabled) setLogoSrc(src);
+  }, [enabled]);
 
   const enqueueProductMutation = useCallback(
     (productId: string, mutation: () => Promise<void>): Promise<void> => {
@@ -1090,7 +1105,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<EditorContextValue>(
     () => ({
-      enabled: EDIT_MODE,
+      enabled,
       hydrated,
       logoSrc,
       overrides,
@@ -1108,6 +1123,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       productsByDropLive,
     }),
     [
+      enabled,
       hydrated,
       logoSrc,
       overrides,
@@ -1137,17 +1153,17 @@ export function useEditor(): EditorContextValue {
 
 /**
  * Fusiona un producto del catálogo con su override del editor.
- * Con EDIT_MODE = false devuelve el producto original intacto.
+ * Fuera de /admin no aplica overrides locales al storefront.
  */
 export function useEditedProduct(product: Product): Product {
-  const { overrides, liveProducts } = useEditor();
+  const { enabled, overrides, liveProducts } = useEditor();
   return useMemo(() => {
     // Preferir la versión del catálogo vivo (incluye custom + overrides)
     const live = liveProducts.find((p) => p.id === product.id);
     if (live) return live;
-    if (!EDIT_MODE) return product;
+    if (!enabled) return product;
     return applyOverride(product, overrides[product.id]);
-  }, [product, overrides, liveProducts]);
+  }, [enabled, product, overrides, liveProducts]);
 }
 
 /**

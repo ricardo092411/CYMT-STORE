@@ -9,7 +9,6 @@ import type { Product } from "@/data/catalog";
 import { useEditor, useLiveProducts } from "@/providers/editor-provider";
 import { useDrops } from "@/providers/drops-provider";
 import type { Drop } from "@/types/drop";
-import { EDIT_MODE } from "@/config/edit-mode";
 import { cn } from "@/lib/utils";
 import { getStorefrontProductMedia } from "@/lib/product-media";
 
@@ -282,7 +281,7 @@ export function ProductBrowser({
         </p>
         <div className="flex flex-wrap items-center gap-3">
           {/* MODO EDITOR — crear producto en esta colección */}
-          {EDIT_MODE && enabled && scopedDrop && (
+          {enabled && scopedDrop && (
             <button
               type="button"
               onClick={() => createProduct(scopedDrop.slug)}
@@ -337,7 +336,7 @@ export function ProductBrowser({
             <div className="grid place-items-center rounded-2xl border border-dashed border-line py-24 text-center">
               <p className="font-display text-lg font-semibold">Sin resultados</p>
               <p className="mt-1 text-sm text-ink-muted">Prueba ajustar los filtros o la búsqueda.</p>
-              {EDIT_MODE && enabled && scopedDrop ? (
+              {enabled && scopedDrop ? (
                 <button
                   type="button"
                   onClick={() => createProduct(scopedDrop.slug)}

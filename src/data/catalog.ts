@@ -13,6 +13,8 @@
  *  STATUS VALUES: "nuevo" | "oferta" | "limitada" | "agotado"
  */
 
+import { APPAREL_SIZES } from "@/lib/product-sizes";
+
 export type ProductStatus = "nuevo" | "oferta" | "limitada" | "agotado";
 
 export interface ProductColor {
@@ -92,7 +94,6 @@ export const COLORS = {
   crimson: { name: "Carmesí", hex: "#e50914" },
 } satisfies Record<string, ProductColor>;
 
-const APPAREL_SIZES = ["S", "M", "L", "XL", "XXL"];
 const ONE_SIZE = ["Única"];
 
 /* ---------------------------- PRODUCTS ---------------------------- */

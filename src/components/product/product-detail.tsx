@@ -11,11 +11,11 @@ import { QuantityStepper } from "./product-card";
 import { useStore } from "@/providers/store-provider";
 import { useEditedProduct, useEditor } from "@/providers/editor-provider";
 import { useDrops } from "@/providers/drops-provider";
-import { EDIT_MODE } from "@/config/edit-mode";
 import { site } from "@/data/site";
 import type { Product } from "@/data/catalog";
 import { cn, safeCartImage } from "@/lib/utils";
 import { getProductImagePublicUrl } from "@/lib/storage";
+import { getAvailableProductSizes } from "@/lib/product-sizes";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -69,16 +69,16 @@ function buildRelationalGallery(productVariants: Product["productVariants"]): {
 
 export function ProductDetail({ product: baseProduct, related }: { product: Product; related: Product[] }) {
   const { addToCart, toggleFavorite, isFavorite } = useStore();
-  const { openEditor } = useEditor();
+  const { openEditor, enabled } = useEditor();
   const drops = useDrops();
-  /* Modo Editor: fusiona overrides del admin (sin EDIT_MODE devuelve el original). */
   const product = useEditedProduct(baseProduct);
   const drop = drops.find((item) => item.slug === product.dropSlug);
 
-  const singleSize = product.sizes.length === 1;
+  const availableSizes = getAvailableProductSizes(product.sizes);
+  const singleSize = availableSizes.length === 1;
   const [activeImg, setActiveImg] = useState(0);
   const [activeRelationalImageKey, setActiveRelationalImageKey] = useState<string | null>(null);
-  const [size, setSize] = useState<string | null>(singleSize ? product.sizes[0] : null);
+  const [size, setSize] = useState<string | null>(singleSize ? availableSizes[0] ?? null : null);
   const [qty, setQty] = useState(1);
 
   const relationalGallery = useMemo(
@@ -235,7 +235,7 @@ export function ProductDetail({ product: baseProduct, related }: { product: Prod
             )}
             <StatusBadge status={product.status} />
             {/* MODO EDITOR — botón discreto, solo visible para el admin */}
-            {EDIT_MODE && (
+            {enabled && (
               <button
                 type="button"
                 onClick={() => openEditor(product.id)}
@@ -280,7 +280,7 @@ export function ProductDetail({ product: baseProduct, related }: { product: Prod
             <div className="mt-7">
               <p className="mb-2.5 text-xs uppercase tracking-wider text-ink-muted">Talla</p>
               <div className="flex flex-wrap gap-2.5">
-                {product.sizes.map((s) => (
+                {availableSizes.map((s) => (
                   <button
                     key={s}
                     onClick={() => setSize(s)}

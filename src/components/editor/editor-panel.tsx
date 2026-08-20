@@ -7,7 +7,7 @@
  * (backdrop + aside deslizante con el mismo easing). No navega, no abre
  * ventanas emergentes y no toca el diseño principal de la tienda.
  *
- * Solo se renderiza cuando EDIT_MODE = true y hay un producto activo.
+ * Solo se renderiza cuando el contexto habilita edición en /admin.
  */
 import {
   getProductImagePublicUrl,
@@ -18,7 +18,6 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ImagePlus, Images, Pencil, Star, Trash2, X } from "lucide-react";
 import { useEditor } from "@/providers/editor-provider";
-import { EDIT_MODE } from "@/config/edit-mode";
 import { cn } from "@/lib/utils";
 import type { Product } from "@/data/catalog";
 
@@ -376,7 +375,7 @@ export function EditorPanel() {
   const coverInputRef = useRef<HTMLInputElement>(null);
   const mockupsInputRef = useRef<HTMLInputElement>(null);
 
-  if (!EDIT_MODE || !enabled) return null;
+  if (!enabled) return null;
 
   async function handleChangeCover(fileList: FileList | null) {
     if (!product || !fileList || fileList.length === 0) return;
