@@ -84,6 +84,8 @@ interface EditorContextValue {
     productId: string,
     nextProductVariants: ProductVariantReplacement[],
   ) => Promise<void>;
+  /** Asigna o quita un Drop en lote y luego recarga el estado confirmado. */
+  assignProductsToDrop: (productIds: string[], dropSlug: string | null) => Promise<void>;
   /** Crea un producto vacío en la colección (drop) indicada y abre el editor. */
   createProduct: (
     dropSlug: string,
@@ -575,6 +577,38 @@ function normalizeProductResponse(value: unknown, fallback?: Product): Product |
     : { ...product, productVariants: fallback?.productVariants ?? product.productVariants };
 }
 
+async function responseError(response: Response, fallback: string): Promise<string> {
+  try {
+    const data: unknown = await response.json();
+    if (isRecord(data) && typeof data.error === "string" && data.error.trim()) {
+      return data.error;
+    }
+  } catch {
+    // La respuesta puede no contener JSON; se conserva el mensaje de respaldo.
+  }
+
+  return fallback;
+}
+
+async function fetchConfirmedProducts(): Promise<Product[]> {
+  const response = await fetch("/api/admin/products");
+  if (!response.ok) {
+    throw new Error(await responseError(response, "Unable to refresh products"));
+  }
+
+  const data: unknown = await response.json();
+  if (!Array.isArray(data)) {
+    throw new Error("Products API returned an invalid response");
+  }
+
+  const normalized = data.map(toProduct);
+  if (normalized.some((product) => product === null)) {
+    throw new Error("Products API returned an invalid product");
+  }
+
+  return normalized.filter((product): product is Product => product !== null);
+}
+
 function toProductVariantCreatePayload(
   variant: ProductVariantReplacement,
 ): ProductVariantWritePayload & { images: ProductVariantImageWritePayload[] } {
@@ -702,13 +736,9 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
     async function loadProducts() {
       try {
-        const response = await fetch("/api/admin/products");
-        if (!response.ok) return;
+        const products = await fetchConfirmedProducts();
+        if (cancelled) return;
 
-        const data: unknown = await response.json();
-        if (!Array.isArray(data) || cancelled) return;
-
-        const products = data.map(toProduct).filter((product): product is Product => product !== null);
         databaseProductsRef.current = products;
         persistedProductsRef.current = products;
         setDatabaseProducts(products);
@@ -886,6 +916,75 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     [enqueueProductMutation, replacePersistedProduct, updateDatabaseProducts],
   );
 
+  const assignProductsToDrop = useCallback(
+    async (productIds: string[], dropSlug: string | null): Promise<void> => {
+      const databaseIds = productIds.map(toDatabaseId);
+      if (
+        databaseIds.length === 0 ||
+        databaseIds.some((id) => id === null)
+      ) {
+        throw new Error("Selecciona productos válidos antes de actualizar el Drop");
+      }
+
+      const ids = databaseIds.filter((id): id is number => id !== null);
+      if (new Set(ids).size !== ids.length) {
+        throw new Error("La selección contiene productos duplicados");
+      }
+
+      let requestError: Error | null = null;
+      try {
+        const response = await fetch("/api/admin/products", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            bulkDropAssignment: {
+              productIds: ids,
+              dropSlug,
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(await responseError(response, "No fue posible actualizar los Drops"));
+        }
+
+        const updated: unknown = await response.json();
+        if (!Array.isArray(updated) || updated.length !== ids.length) {
+          throw new Error("La API no confirmó todos los productos actualizados");
+        }
+
+        const updatedIds = updated.map((product) =>
+          isRecord(product) && typeof product.id === "number" ? product.id : null,
+        );
+        if (
+          updatedIds.some((id) => id === null) ||
+          new Set(updatedIds).size !== ids.length ||
+          !ids.every((id) => updatedIds.includes(id))
+        ) {
+          throw new Error("La API confirmó una selección de productos inesperada");
+        }
+      } catch (error) {
+        requestError = error instanceof Error ? error : new Error("No fue posible actualizar los Drops");
+      }
+
+      try {
+        const confirmedProducts = await fetchConfirmedProducts();
+        databaseProductsRef.current = confirmedProducts;
+        persistedProductsRef.current = confirmedProducts;
+        setDatabaseProducts(confirmedProducts);
+      } catch (error) {
+        const refreshError = error instanceof Error ? error.message : "Error desconocido";
+        if (requestError) {
+          throw new Error(`${requestError.message}. Tampoco fue posible refrescar los productos: ${refreshError}`);
+        }
+        throw new Error(`La actualización fue confirmada, pero no fue posible refrescar los productos: ${refreshError}`);
+      }
+
+      if (requestError) throw requestError;
+    },
+    [],
+  );
+
   const createProduct = useCallback(
     async (
       dropSlug: string,
@@ -1002,6 +1101,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       updateLogo,
       updateOverride,
       replaceProductVariants,
+      assignProductsToDrop,
       createProduct,
       deleteProduct,
       getLiveProduct,
@@ -1018,6 +1118,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       updateLogo,
       updateOverride,
       replaceProductVariants,
+      assignProductsToDrop,
       createProduct,
       deleteProduct,
       getLiveProduct,

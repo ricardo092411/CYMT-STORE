@@ -3,11 +3,12 @@ import { notFound } from "next/navigation";
 import Image from "next/image";
 import { Container } from "@/components/ui";
 import { ProductBrowser } from "@/components/product/product-browser";
-import { drops, getDrop, productsByDrop } from "@/data/catalog";
 import { site } from "@/data/site";
+import { getDropBySlug, getDrops } from "@/lib/drops";
 
-export function generateStaticParams() {
-  return drops.map((d) => ({ slug: d.slug }));
+export async function generateStaticParams() {
+  const drops = await getDrops();
+  return drops.map((drop) => ({ slug: drop.slug }));
 }
 
 export async function generateMetadata({
@@ -16,15 +17,15 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const drop = getDrop(slug);
+  const drop = await getDropBySlug(slug);
   if (!drop) return {};
   return {
     title: drop.name,
-    description: drop.description,
+    description: drop.description ?? undefined,
     alternates: { canonical: `/drop/${drop.slug}` },
     openGraph: {
-      title: `${drop.name} — ${drop.title}`,
-      description: drop.description,
+      title: drop.title ? `${drop.name} — ${drop.title}` : drop.name,
+      description: drop.description ?? undefined,
       images: drop.banner ? [{ url: drop.banner, width: 1200, height: 630 }] : undefined,
     },
   };
@@ -36,12 +37,8 @@ export default async function DropPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const drop = getDrop(slug);
+  const drop = await getDropBySlug(slug);
   if (!drop) notFound();
-
-  /* Lista seed del catálogo base; ProductBrowser usa el catálogo vivo
-     (sin límite) y el botón "Nuevo Producto" en modo editor. */
-  const items = productsByDrop(slug);
 
   return (
     <>
@@ -72,7 +69,7 @@ export default async function DropPage({
         </Container>
       </section>
 
-      <ProductBrowser products={items} scopedDrop={drop} />
+      <ProductBrowser scopedDrop={drop} />
     </>
   );
 }

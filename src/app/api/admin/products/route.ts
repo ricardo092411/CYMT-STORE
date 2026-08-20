@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { productImages, productVariants, products } from "@/db/schema";
+import { drops, productImages, productVariants, products } from "@/db/schema";
 import type { ProductColor, ProductStatus } from "@/data/catalog";
 
 type ProductImage = typeof productImages.$inferSelect;
@@ -64,6 +64,12 @@ interface ProductVariantOperations {
 }
 
 class InvalidVariantOperationsError extends Error {}
+class InvalidBulkDropAssignmentError extends Error {}
+
+interface BulkDropAssignment {
+  productIds: number[];
+  dropSlug: string | null;
+}
 
 interface ProductWriteValues {
   slug?: string;
@@ -134,6 +140,55 @@ function isVariantClientKey(value: unknown): value is string {
 
 function hasUniqueIds(ids: number[]): boolean {
   return new Set(ids).size === ids.length;
+}
+
+function toBulkDropAssignment(value: unknown): BulkDropAssignment | null {
+  if (!isRecord(value) || !Array.isArray(value.productIds)) return null;
+
+  const parsedProductIds = value.productIds.map(productId);
+  if (
+    parsedProductIds.length === 0 ||
+    parsedProductIds.some((id) => id === null)
+  ) {
+    return null;
+  }
+
+  const productIds = parsedProductIds.filter((id): id is number => id !== null);
+  if (!hasUniqueIds(productIds)) return null;
+
+  if (value.dropSlug !== null && typeof value.dropSlug !== "string") return null;
+  return { productIds, dropSlug: value.dropSlug };
+}
+
+async function applyBulkDropAssignment(assignment: BulkDropAssignment) {
+  return db.transaction(async (tx) => {
+    if (assignment.dropSlug !== null) {
+      const matchingDrop = await tx
+        .select({ slug: drops.slug })
+        .from(drops)
+        .where(eq(drops.slug, assignment.dropSlug))
+        .limit(1);
+
+      if (!matchingDrop[0]) {
+        throw new InvalidBulkDropAssignmentError("Drop does not exist");
+      }
+    }
+
+    const existing = await tx
+      .select({ id: products.id })
+      .from(products)
+      .where(inArray(products.id, assignment.productIds));
+
+    if (existing.length !== assignment.productIds.length) {
+      throw new InvalidBulkDropAssignmentError("One or more products do not exist");
+    }
+
+    return tx
+      .update(products)
+      .set({ dropSlug: assignment.dropSlug })
+      .where(inArray(products.id, assignment.productIds))
+      .returning({ id: products.id, dropSlug: products.dropSlug });
+  });
 }
 
 function hasUniquePositions(values: Array<{ position: number }>): boolean {
@@ -815,6 +870,24 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Invalid product data" }, { status: 400 });
     }
 
+    if (body.bulkDropAssignment !== undefined) {
+      if (Object.keys(body).length !== 1) {
+        return NextResponse.json({ error: "Invalid bulk drop assignment" }, { status: 400 });
+      }
+
+      const assignment = toBulkDropAssignment(body.bulkDropAssignment);
+      if (assignment === null) {
+        return NextResponse.json({ error: "Invalid bulk drop assignment" }, { status: 400 });
+      }
+
+      const updated = await applyBulkDropAssignment(assignment);
+      if (updated.length !== assignment.productIds.length) {
+        throw new Error("Bulk drop assignment did not update every product");
+      }
+
+      return NextResponse.json(updated);
+    }
+
     const id = productId(body.id);
     const values = toProductWriteValues(body);
     const variantOperations =
@@ -1070,7 +1143,7 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json(updated);
   } catch (error) {
-    if (error instanceof InvalidVariantOperationsError) {
+    if (error instanceof InvalidVariantOperationsError || error instanceof InvalidBulkDropAssignmentError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 

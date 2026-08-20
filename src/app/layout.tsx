@@ -4,12 +4,14 @@ import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { StoreProvider } from "@/providers/store-provider";
 import { EditorProvider } from "@/providers/editor-provider";
+import { DropsProvider } from "@/providers/drops-provider";
 import { AnnouncementBar } from "@/components/layout/announcement-bar";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { FloatingSocial } from "@/components/layout/floating-social";
 import { GlobalChrome } from "@/components/layout/global-chrome";
 import { site } from "@/data/site";
+import { getDrops } from "@/lib/drops";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -77,18 +79,22 @@ export const viewport: Viewport = {
   colorScheme: "dark",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const drops = await getDrops();
+
   return (
     <html lang="es" className={`${inter.variable} ${grotesk.variable}`} suppressHydrationWarning>
       <body className="min-h-dvh bg-bg font-sans text-ink antialiased">
         <StoreProvider>
           <EditorProvider>
-            <AnnouncementBar />
-            <Header />
-            <main>{children}</main>
-            <Footer />
-            <FloatingSocial />
-            <GlobalChrome />
+            <DropsProvider initialDrops={drops}>
+              <AnnouncementBar />
+              <Header />
+              <main>{children}</main>
+              <Footer />
+              <FloatingSocial />
+              <GlobalChrome />
+            </DropsProvider>
           </EditorProvider>
         </StoreProvider>
       </body>

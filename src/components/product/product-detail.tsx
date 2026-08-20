@@ -10,9 +10,10 @@ import { Price, StatusBadge, Container } from "@/components/ui";
 import { QuantityStepper } from "./product-card";
 import { useStore } from "@/providers/store-provider";
 import { useEditedProduct, useEditor } from "@/providers/editor-provider";
+import { useDrops } from "@/providers/drops-provider";
 import { EDIT_MODE } from "@/config/edit-mode";
 import { site } from "@/data/site";
-import { getDrop, type Product } from "@/data/catalog";
+import type { Product } from "@/data/catalog";
 import { cn, safeCartImage } from "@/lib/utils";
 import { getProductImagePublicUrl } from "@/lib/storage";
 
@@ -69,9 +70,10 @@ function buildRelationalGallery(productVariants: Product["productVariants"]): {
 export function ProductDetail({ product: baseProduct, related }: { product: Product; related: Product[] }) {
   const { addToCart, toggleFavorite, isFavorite } = useStore();
   const { openEditor } = useEditor();
+  const drops = useDrops();
   /* Modo Editor: fusiona overrides del admin (sin EDIT_MODE devuelve el original). */
   const product = useEditedProduct(baseProduct);
-  const drop = getDrop(product.dropSlug);
+  const drop = drops.find((item) => item.slug === product.dropSlug);
 
   const singleSize = product.sizes.length === 1;
   const [activeImg, setActiveImg] = useState(0);

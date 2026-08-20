@@ -9,7 +9,7 @@ import { Search, Heart, User, ShoppingBag, Menu, X, ChevronDown, Sparkles, Penci
 import { useStore } from "@/providers/store-provider";
 import { useEditor } from "@/providers/editor-provider";
 import { site } from "@/data/site";
-import { drops } from "@/data/catalog";
+import { useDrops } from "@/providers/drops-provider";
 import { socialItems } from "@/components/icons/social-icons";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +46,7 @@ export function Header() {
   const { cartCount, favorites, hydrated, setCartOpen, setSearchOpen, setClubOpen, menuOpen, setMenuOpen } =
     useStore();
   const { enabled: editorEnabled, logoSrc, updateLogo } = useEditor();
+  const drops = useDrops();
   const [scrolled, setScrolled] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();

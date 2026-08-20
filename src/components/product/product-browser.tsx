@@ -5,12 +5,10 @@ import { AnimatePresence, motion } from "framer-motion";
 import { SlidersHorizontal, Search, X, Plus } from "lucide-react";
 import { ProductCard } from "./product-card";
 import { Container } from "@/components/ui";
-import {
-  drops as allDrops,
-  type Drop,
-  type Product,
-} from "@/data/catalog";
+import type { Product } from "@/data/catalog";
 import { useEditor, useLiveProducts } from "@/providers/editor-provider";
+import { useDrops } from "@/providers/drops-provider";
+import type { Drop } from "@/types/drop";
 import { EDIT_MODE } from "@/config/edit-mode";
 import { cn } from "@/lib/utils";
 import { getStorefrontProductMedia } from "@/lib/product-media";
@@ -46,6 +44,7 @@ export function ProductBrowser({
 }) {
   const liveProducts = useLiveProducts();
   const { createProduct, enabled } = useEditor();
+  const drops = useDrops();
 
   const products = useMemo(() => {
     return scopedDrop ? liveProducts.filter((p) => p.dropSlug === scopedDrop.slug) : liveProducts;
@@ -189,7 +188,7 @@ export function ProductBrowser({
       {!scopedDrop && (
         <FilterGroup title="Drop">
           <div className="flex flex-wrap gap-2">
-            {allDrops.map((d) => (
+            {drops.map((d) => (
               <Chip key={d.slug} active={dropsSel.includes(d.slug)} onClick={() => toggle(setDropsSel, dropsSel, d.slug)}>
                 {d.name}
               </Chip>

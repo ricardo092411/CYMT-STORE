@@ -2,8 +2,11 @@
 
 import { Package, Tag, Image as ImageIcon, LayoutGrid, DollarSign, Boxes } from "lucide-react";
 import { Container } from "@/components/ui";
-import { drops, allTypes } from "@/data/catalog";
+import { DropsBulkOrganizer } from "@/components/admin/drops-bulk-organizer";
+import { DropCoverManager } from "@/components/admin/drop-cover-manager";
+import { allTypes } from "@/data/catalog";
 import { useLiveProducts } from "@/providers/editor-provider";
+import { useDrops } from "@/providers/drops-provider";
 
 /**
  * Admin — ARCHITECTURE READY (read-only preview + stats del catálogo vivo).
@@ -11,6 +14,7 @@ import { useLiveProducts } from "@/providers/editor-provider";
  */
 export default function AdminPage() {
   const products = useLiveProducts();
+  const drops = useDrops();
   const featuredCount = products.filter((p) => p.featured).length;
   const typesCount = Array.from(new Set(products.map((p) => p.type))).length || allTypes.length;
 
@@ -49,6 +53,9 @@ export default function AdminPage() {
           </div>
         ))}
       </div>
+
+      <DropsBulkOrganizer />
+      <DropCoverManager />
 
       <h2 className="mt-12 font-display text-xl font-semibold">Módulos planificados</h2>
       <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

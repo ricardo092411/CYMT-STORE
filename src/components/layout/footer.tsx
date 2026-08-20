@@ -4,14 +4,15 @@ import Link from "next/link";
 import Image from "next/image";
 import { Sparkles } from "lucide-react";
 import { site } from "@/data/site";
-import { drops } from "@/data/catalog";
 import { socialItems } from "@/components/icons/social-icons";
 import { useStore } from "@/providers/store-provider";
 import { useEditor } from "@/providers/editor-provider";
+import { useDrops } from "@/providers/drops-provider";
 
 export function Footer() {
   const { setClubOpen } = useStore();
   const { logoSrc } = useEditor();
+  const drops = useDrops();
 
   return (
     <footer className="relative mt-24 border-t border-line bg-bg-soft">

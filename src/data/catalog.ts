@@ -78,20 +78,7 @@ export interface Product {
   createdAt: string;
 }
 
-export type DropTheme = "origin" | "rock" | "anime" | "nature" | "retro";
-
-export interface Drop {
-  slug: string;
-  name: string;
-  title: string;
-  description: string;
-  /** Banner image path. When null, a themed gradient banner is rendered. */
-  banner: string | null;
-  image: string | null;
-  theme: DropTheme;
-  live: boolean;
-  releaseDate: string;
-}
+export type { Drop, DropTheme } from "@/types/drop";
 
 /* ------------------------- Shared palette ------------------------- */
 
@@ -107,83 +94,6 @@ export const COLORS = {
 
 const APPAREL_SIZES = ["S", "M", "L", "XL", "XXL"];
 const ONE_SIZE = ["Única"];
-
-/* ------------------------------ DROPS ----------------------------- */
-
-export const drops: Drop[] = [
-  {
-    slug: "drop-anime",
-    name: "DROP ANIME",
-    title: "Mundos paralelos",
-    description:
-      "Inspirado en la estética anime y el cyberpunk japonés. Grafismos audaces, energía neón y personajes que cuentan historias.",
-    banner: "/images/banners/drop-anime.jpg",
-    image: "/images/banners/drop-anime.jpg",
-    theme: "anime",
-    live: true,
-    releaseDate: "2026-04-18",
-  },
-  {
-    slug: "drop-retro",
-    name: "DROP RETRO",
-    title: "Sintético 89",
-    description:
-      "Nostalgia de los 80 y 90: grids neón, videojuegos arcade y la vibra synthwave. Una carta de amor a la era analógica.",
-    banner: "/images/banners/drop-retro.jpg",
-    image: "/images/banners/drop-retro.jpg",
-    theme: "retro",
-    live: true,
-    releaseDate: "2026-04-18",
-  },
-  {
-    slug: "drop-rock",
-    name: "DROP ROCK",
-    title: "Volumen al máximo",
-    description:
-      "Para los que viven con el volumen al máximo. Actitud rock, guitarras y la energía cruda del escenario.",
-    banner: "/images/banners/drop-rock.jpg",
-    image: "/images/banners/drop-rock.jpg",
-    theme: "rock",
-    live: true,
-    releaseDate: "2026-03-07",
-  },
-  {
-    slug: "drop-nature",
-    name: "DROP NATURE",
-    title: "Tierra salvaje",
-    description:
-      "La calma de lo salvaje. Bosques, niebla y la fuerza silenciosa de la naturaleza en cada pieza.",
-    banner: "/images/banners/drop-nature.jpg",
-    image: "/images/banners/drop-nature.jpg",
-    theme: "nature",
-    live: true,
-    releaseDate: "2026-02-14",
-  },
-  {
-    slug: "drop-001",
-    name: "DROP 001",
-    title: "El origen",
-    description:
-      "Donde todo comenzó. Los esenciales que definieron el lenguaje de la marca: minimalista, oscuro y atemporal.",
-    banner: "/images/banners/drop-001.jpg",
-    image: "/images/banners/drop-001.jpg",
-    theme: "origin",
-    live: true,
-    releaseDate: "2026-01-10",
-  },
-  {
-    slug: "drop-002",
-    name: "DROP 002",
-    title: "La evolución",
-    description:
-      "La evolución del origen. Siluetas refinadas, mejores materiales y la misma obsesión por el detalle.",
-    banner: null,
-    image: null,
-    theme: "origin",
-    live: true,
-    releaseDate: "2026-05-02",
-  },
-];
 
 /* ---------------------------- PRODUCTS ---------------------------- */
 
@@ -559,20 +469,8 @@ export const products: Product[] = [
 
 /* --------------------------- Selectors ---------------------------- */
 
-export function getDrop(slug: string): Drop | undefined {
-  return drops.find((d) => d.slug === slug);
-}
-
 export function getProduct(slug: string): Product | undefined {
   return products.find((p) => p.slug === slug);
-}
-
-export function productsByDrop(dropSlug: string): Product[] {
-  return products.filter((p) => p.dropSlug === dropSlug);
-}
-
-export function dropOf(product: Product): Drop | undefined {
-  return getDrop(product.dropSlug);
 }
 
 export const featuredProducts: Product[] = products.filter((p) => p.featured);

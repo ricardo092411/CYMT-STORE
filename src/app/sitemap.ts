@@ -1,10 +1,12 @@
 import type { MetadataRoute } from "next";
 import { site } from "@/data/site";
-import { products, drops } from "@/data/catalog";
+import { products } from "@/data/catalog";
+import { getDrops } from "@/lib/drops";
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = site.url;
   const now = new Date();
+  const drops = await getDrops();
 
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: `${base}/`, lastModified: now, changeFrequency: "weekly", priority: 1 },
@@ -14,7 +16,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   const dropRoutes: MetadataRoute.Sitemap = drops.map((d) => ({
     url: `${base}/drop/${d.slug}`,
-    lastModified: new Date(d.releaseDate),
+    lastModified: d.releaseDate ? new Date(`${d.releaseDate}T00:00:00.000Z`) : now,
     changeFrequency: "monthly",
     priority: 0.8,
   }));
