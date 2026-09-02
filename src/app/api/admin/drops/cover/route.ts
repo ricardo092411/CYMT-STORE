@@ -1,3 +1,4 @@
+import { isAdmin } from "@/lib/auth/admin";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
@@ -73,6 +74,12 @@ function toFile(value: FormDataEntryValue | null): File | null {
 }
 
 export async function POST(request: Request) {
+  if (!(await isAdmin())) {
+    return NextResponse.json(
+      { error: "No autorizado" },
+      { status: 401 },
+    );
+  }
   let formData: FormData;
   try {
     formData = await request.formData();

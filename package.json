@@ -10,6 +10,7 @@
     "import:product-library": "tsx scripts/import-product-library.ts"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.110.9",
     "clsx": "^2.1.1",
     "dotenv": "17.3.1",

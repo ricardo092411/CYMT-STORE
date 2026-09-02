@@ -592,8 +592,8 @@ async function responseError(response: Response, fallback: string): Promise<stri
   return fallback;
 }
 
-async function fetchConfirmedProducts(): Promise<Product[]> {
-  const response = await fetch("/api/admin/products");
+async function fetchConfirmedProducts(endpoint: "/api/products" | "/api/admin/products"): Promise<Product[]> {
+  const response = await fetch(endpoint);
   if (!response.ok) {
     throw new Error(await responseError(response, "Unable to refresh products"));
   }
@@ -741,7 +741,9 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
     async function loadProducts() {
       try {
-        const products = await fetchConfirmedProducts();
+        const products = await fetchConfirmedProducts(
+          enabled ? "/api/admin/products" : "/api/products",
+        );
         if (cancelled) return;
 
         databaseProductsRef.current = products;
@@ -757,7 +759,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [enabled]);
 
   /* Persistir cambios */
   useEffect(() => {
@@ -983,7 +985,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const confirmedProducts = await fetchConfirmedProducts();
+        const confirmedProducts = await fetchConfirmedProducts("/api/admin/products");
         databaseProductsRef.current = confirmedProducts;
         persistedProductsRef.current = confirmedProducts;
         setDatabaseProducts(confirmedProducts);

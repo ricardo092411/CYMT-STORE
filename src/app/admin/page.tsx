@@ -1,12 +1,13 @@
 "use client";
 
-import { Package, Tag, Image as ImageIcon, LayoutGrid, DollarSign, Boxes } from "lucide-react";
+import { Package, Tag, Image as ImageIcon, LayoutGrid, DollarSign, Boxes, LogOut } from "lucide-react";
 import { Container } from "@/components/ui";
 import { DropsBulkOrganizer } from "@/components/admin/drops-bulk-organizer";
 import { DropCoverManager } from "@/components/admin/drop-cover-manager";
 import { allTypes } from "@/data/catalog";
 import { useLiveProducts } from "@/providers/editor-provider";
 import { useDrops } from "@/providers/drops-provider";
+import { logoutAdmin } from "./actions";
 
 /**
  * Admin — ARCHITECTURE READY (read-only preview + stats del catálogo vivo).
@@ -38,6 +39,17 @@ export default function AdminPage() {
       <span className="inline-flex items-center gap-2 rounded-full bg-brand-soft px-3 py-1 text-xs font-semibold text-brand">
         Panel de administración
       </span>
+      <div className="flex justify-end">
+  <form action={logoutAdmin}>
+    <button
+      type="submit"
+      className="inline-flex items-center gap-2 rounded-xl border border-line bg-surface px-4 py-2 text-sm font-medium text-ink-muted transition hover:border-brand/40 hover:text-brand"
+    >
+      <LogOut className="h-4 w-4" />
+      Cerrar sesión
+    </button>
+  </form>
+</div>
       <h1 className="mt-4 font-display text-3xl font-bold md:text-4xl">CYMT Admin</h1>
       <p className="mt-3 max-w-2xl text-ink-muted">
         El catálogo vivo ya permite crear productos ilimitados por colección desde cada Drop

@@ -1,3 +1,4 @@
+import { isAdmin } from "@/lib/auth/admin";
 import { NextRequest, NextResponse } from "next/server";
 import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
@@ -707,36 +708,16 @@ function toProductWriteValues(body: Record<string, unknown>): ProductWriteValues
 }
 
 export async function GET() {
-  try {
-    const [data, variants, images] = await Promise.all([
-      db.select().from(products),
-      db.select().from(productVariants).orderBy(asc(productVariants.position)),
-      db.select().from(productImages).orderBy(asc(productImages.position)),
-    ]);
-
-    const imagesByVariantId = new Map<number, ProductImage[]>();
-    for (const image of images) {
-      const variantImages = imagesByVariantId.get(image.productVariantId) ?? [];
-      variantImages.push(image);
-      imagesByVariantId.set(image.productVariantId, variantImages);
-    }
-
-    const variantsByProductId = new Map<number, ProductVariantWithImages[]>();
-    for (const variant of variants) {
-      const productVariantsForProduct = variantsByProductId.get(variant.productId) ?? [];
-      productVariantsForProduct.push({
-        ...variant,
-        images: imagesByVariantId.get(variant.id) ?? [],
-      });
-      variantsByProductId.set(variant.productId, productVariantsForProduct);
-    }
-
+  if (!(await isAdmin())) {
     return NextResponse.json(
-      data.map((product) => ({
-        ...product,
-        productVariants: variantsByProductId.get(product.id) ?? [],
-      })),
+      { error: "No autorizado" },
+      { status: 401 }
     );
+  }
+
+  try {
+    const { getProductsWithVariants } = await import("@/lib/products");
+    return NextResponse.json(await getProductsWithVariants());
   } catch (error) {
     console.error(error);
 
@@ -748,6 +729,12 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  if (!(await isAdmin())) {
+    return NextResponse.json(
+      { error: "No autorizado" },
+      { status: 401 }
+    );
+  }
   try {
     const body: unknown = await req.json();
     if (
@@ -864,6 +851,12 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  if (!(await isAdmin())) {
+    return NextResponse.json(
+      { error: "No autorizado" },
+      { status: 401 }
+    );
+  }
   try {
     const body: unknown = await req.json();
     if (!isRecord(body)) {
@@ -1157,6 +1150,12 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  if (!(await isAdmin())) {
+    return NextResponse.json(
+      { error: "No autorizado" },
+      { status: 401 }
+    );
+  }
   try {
     const body: unknown = await req.json();
     const id = isRecord(body) ? productId(body.id) : null;
