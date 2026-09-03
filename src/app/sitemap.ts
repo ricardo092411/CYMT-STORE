@@ -1,12 +1,17 @@
 import type { MetadataRoute } from "next";
 import { site } from "@/data/site";
-import { products } from "@/data/catalog";
 import { getDrops } from "@/lib/drops";
+import { getProductsWithVariants } from "@/lib/products";
+
+export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = site.url;
   const now = new Date();
-  const drops = await getDrops();
+  const [drops, products] = await Promise.all([
+    getDrops(),
+    getProductsWithVariants(),
+  ]);
 
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: `${base}/`, lastModified: now, changeFrequency: "weekly", priority: 1 },

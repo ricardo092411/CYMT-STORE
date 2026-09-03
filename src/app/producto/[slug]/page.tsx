@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { ProductPageClient } from "@/components/product/product-page-client";
-import { products, getProduct } from "@/data/catalog";
+import {
+  getPrimaryProductImageUrl,
+  getProductWithVariantsBySlug,
+} from "@/lib/products";
+import { normalizeProduct } from "@/lib/product-normalizer";
 
-export function generateStaticParams() {
-  return products.map((p) => ({ slug: p.slug }));
-}
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,
@@ -12,41 +14,41 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const product = getProduct(slug);
+  const product = await getProductWithVariantsBySlug(slug);
   if (!product) {
     return {
       title: "Producto",
       robots: { index: false, follow: true },
     };
   }
+  const primaryImage = getPrimaryProductImageUrl(product);
+
   return {
     title: product.name,
-    description: product.description,
+    description: product.description ?? undefined,
     alternates: { canonical: `/producto/${product.slug}` },
     openGraph: {
       title: product.name,
-      description: product.description,
-      images: product.images[0]
-        ? [{ url: product.images[0], width: 1000, height: 1250 }]
+      description: product.description ?? undefined,
+      images: primaryImage
+        ? [{ url: primaryImage, width: 1000, height: 1250 }]
         : undefined,
     },
   };
 }
 
 /**
- * Ficha de producto.
- * - Productos del catálogo base: SSG + seed server-side.
- * - Productos creados en el editor: se resuelven en cliente desde el catálogo vivo.
- * dynamicParams permite slugs nuevos sin reescribir la app.
+ * Ficha de producto resuelta en cada request desde PostgreSQL.
+ * El seed server-side permite renderizar productos creados desde el admin,
+ * incluso si nunca existieron en el catálogo legacy.
  */
-export const dynamicParams = true;
-
 export default async function ProductPage({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const seed = getProduct(slug) ?? null;
+  const product = await getProductWithVariantsBySlug(slug);
+  const seed = product ? normalizeProduct(product) : null;
   return <ProductPageClient slug={slug} seed={seed} />;
 }
