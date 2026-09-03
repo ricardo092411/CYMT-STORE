@@ -13,6 +13,7 @@ import type { Drop } from "@/types/drop";
 export function DropsSection() {
   const { productsByDropLive } = useEditor();
   const drops = useDrops();
+  const liveDrops = drops.filter((drop) => drop.live);
 
   return (
     <section className="py-16 md:py-24">
@@ -26,7 +27,7 @@ export function DropsSection() {
         </Reveal>
 
         <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 md:gap-6">
-          {drops.map((drop, i) => (
+          {liveDrops.map((drop, i) => (
             <Reveal key={drop.slug} delay={(i % 3) * 0.08}>
               <DropCard drop={drop} count={productsByDropLive(drop.slug).length} />
             </Reveal>

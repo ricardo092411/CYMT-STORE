@@ -163,14 +163,16 @@ function toBulkDropAssignment(value: unknown): BulkDropAssignment | null {
 
 async function applyBulkDropAssignment(assignment: BulkDropAssignment) {
   return db.transaction(async (tx) => {
+    let targetDrop: { id: number; slug: string } | null = null;
     if (assignment.dropSlug !== null) {
       const matchingDrop = await tx
-        .select({ slug: drops.slug })
+        .select({ id: drops.id, slug: drops.slug })
         .from(drops)
         .where(eq(drops.slug, assignment.dropSlug))
         .limit(1);
 
-      if (!matchingDrop[0]) {
+      targetDrop = matchingDrop[0] ?? null;
+      if (!targetDrop) {
         throw new InvalidBulkDropAssignmentError("Drop does not exist");
       }
     }
@@ -186,9 +188,12 @@ async function applyBulkDropAssignment(assignment: BulkDropAssignment) {
 
     return tx
       .update(products)
-      .set({ dropSlug: assignment.dropSlug })
+      .set({
+        dropId: targetDrop?.id ?? null,
+        dropSlug: assignment.dropSlug,
+      })
       .where(inArray(products.id, assignment.productIds))
-      .returning({ id: products.id, dropSlug: products.dropSlug });
+      .returning({ id: products.id, dropId: products.dropId, dropSlug: products.dropSlug });
   });
 }
 

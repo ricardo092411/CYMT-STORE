@@ -2,7 +2,7 @@ import "server-only";
 
 import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { productImages, productVariants, products } from "@/db/schema";
+import { drops, productImages, productVariants, products } from "@/db/schema";
 
 type ProductImage = typeof productImages.$inferSelect;
 
@@ -20,10 +20,7 @@ export async function getProducts() {
   return await db.select().from(products);
 }
 
-/**
- * Public catalog read model used by the storefront. Administrative writes and
- * the corresponding protected endpoint remain separate from this read path.
- */
+/** Complete relational catalog read model for administrative use. */
 export async function getProductsWithVariants(): Promise<
   ProductWithVariants[]
 > {
@@ -63,6 +60,59 @@ export async function getProductWithVariantsBySlug(
     : [];
 
   return attachProductVariants([product], variants, images)[0] ?? null;
+}
+
+type HiddenDropReferences = {
+  ids: Set<number>;
+  slugs: Set<string>;
+};
+
+async function getHiddenDropReferences(): Promise<HiddenDropReferences> {
+  const hiddenDrops = await db
+    .select({ id: drops.id, slug: drops.slug })
+    .from(drops)
+    .where(eq(drops.live, false));
+
+  return {
+    ids: new Set(hiddenDrops.map((drop) => drop.id)),
+    slugs: new Set(hiddenDrops.map((drop) => drop.slug)),
+  };
+}
+
+function belongsToHiddenDrop(
+  product: typeof products.$inferSelect,
+  hiddenDrops: HiddenDropReferences,
+): boolean {
+  return (
+    (product.dropId !== null && hiddenDrops.ids.has(product.dropId)) ||
+    (product.dropSlug !== null && hiddenDrops.slugs.has(product.dropSlug))
+  );
+}
+
+/**
+ * Public catalog read model. A product is hidden when either its relational
+ * Drop id or legacy Drop slug points at an unpublished Drop. Both references
+ * are checked so historical rows with only one populated remain private.
+ */
+export async function getPublicProductsWithVariants(): Promise<ProductWithVariants[]> {
+  const [allProducts, hiddenDrops] = await Promise.all([
+    getProductsWithVariants(),
+    getHiddenDropReferences(),
+  ]);
+
+  return allProducts.filter((product) => !belongsToHiddenDrop(product, hiddenDrops));
+}
+
+/** Public single-product read model with the same unpublished-Drop policy. */
+export async function getPublicProductWithVariantsBySlug(
+  slug: string,
+): Promise<ProductWithVariants | null> {
+  const [product, hiddenDrops] = await Promise.all([
+    getProductWithVariantsBySlug(slug),
+    getHiddenDropReferences(),
+  ]);
+
+  return product && !belongsToHiddenDrop(product, hiddenDrops) ? product : null;
 }
 
 /** Returns the persisted cover image, preferring relational media over legacy images. */

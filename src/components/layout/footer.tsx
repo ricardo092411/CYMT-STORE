@@ -13,6 +13,7 @@ export function Footer() {
   const { setClubOpen } = useStore();
   const { logoSrc } = useEditor();
   const drops = useDrops();
+  const liveDrops = drops.filter((drop) => drop.live);
 
   return (
     <footer className="relative mt-24 border-t border-line bg-bg-soft">
@@ -54,7 +55,7 @@ export function Footer() {
           {/* Tienda / Drops */}
           <FooterCol title="Tienda">
             <Link href="/tienda" className="footer-link">Ver todo</Link>
-            {drops.slice(0, 5).map((d) => (
+            {liveDrops.slice(0, 5).map((d) => (
               <Link key={d.slug} href={`/drop/${d.slug}`} className="footer-link">
                 {d.name}
               </Link>

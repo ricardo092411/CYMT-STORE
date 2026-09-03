@@ -4,11 +4,16 @@ import Image from "next/image";
 import { Container } from "@/components/ui";
 import { ProductBrowser } from "@/components/product/product-browser";
 import { site } from "@/data/site";
-import { getDropBySlug, getDrops } from "@/lib/drops";
+import { isAdmin } from "@/lib/auth/admin";
+import { getDropBySlug } from "@/lib/drops";
 
-export async function generateStaticParams() {
-  const drops = await getDrops();
-  return drops.map((drop) => ({ slug: drop.slug }));
+export const dynamic = "force-dynamic";
+
+async function getVisibleDrop(slug: string) {
+  const drop = await getDropBySlug(slug);
+  if (!drop) return null;
+  if (drop.live || (await isAdmin())) return drop;
+  return null;
 }
 
 export async function generateMetadata({
@@ -17,8 +22,8 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const drop = await getDropBySlug(slug);
-  if (!drop) return {};
+  const drop = await getVisibleDrop(slug);
+  if (!drop) return { robots: { index: false, follow: false } };
   return {
     title: drop.name,
     description: drop.description ?? undefined,
@@ -37,7 +42,7 @@ export default async function DropPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const drop = await getDropBySlug(slug);
+  const drop = await getVisibleDrop(slug);
   if (!drop) notFound();
 
   return (

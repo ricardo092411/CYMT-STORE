@@ -47,6 +47,7 @@ export function Header() {
     useStore();
   const { enabled: editorEnabled, logoSrc, updateLogo } = useEditor();
   const drops = useDrops();
+  const liveDrops = drops.filter((drop) => drop.live);
   const [scrolled, setScrolled] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
@@ -136,7 +137,7 @@ export function Header() {
               </button>
               <div className="invisible absolute left-1/2 top-full z-50 w-64 -translate-x-1/2 translate-y-2 pt-3 opacity-0 transition-all duration-300 group-hover/drops:visible group-hover/drops:translate-y-0 group-hover/drops:opacity-100">
                 <div className="overflow-hidden rounded-2xl border border-line bg-surface p-2 shadow-2xl">
-                  {drops.map((d) => (
+                  {liveDrops.map((d) => (
                     <Link
                       key={d.slug}
                       href={`/drop/${d.slug}`}
@@ -248,7 +249,7 @@ export function Header() {
                 </Link>
                 <p className="mt-4 mb-1 text-xs uppercase tracking-[0.2em] text-ink-faint">Drops</p>
                 <div className="flex flex-col">
-                  {drops.map((d) => (
+                  {liveDrops.map((d) => (
                     <Link
                       key={d.slug}
                       href={`/drop/${d.slug}`}

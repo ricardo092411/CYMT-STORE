@@ -44,6 +44,7 @@ export function ProductBrowser({
   const liveProducts = useLiveProducts();
   const { createProduct, enabled } = useEditor();
   const drops = useDrops();
+  const liveDrops = drops.filter((drop) => drop.live);
 
   const products = useMemo(() => {
     return scopedDrop ? liveProducts.filter((p) => p.dropSlug === scopedDrop.slug) : liveProducts;
@@ -187,7 +188,7 @@ export function ProductBrowser({
       {!scopedDrop && (
         <FilterGroup title="Drop">
           <div className="flex flex-wrap gap-2">
-            {drops.map((d) => (
+            {liveDrops.map((d) => (
               <Chip key={d.slug} active={dropsSel.includes(d.slug)} onClick={() => toggle(setDropsSel, dropsSel, d.slug)}>
                 {d.name}
               </Chip>

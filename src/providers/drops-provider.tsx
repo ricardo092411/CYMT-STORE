@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { usePathname } from "next/navigation";
 import type { Drop } from "@/types/drop";
 
 type DropsContextValue = {
@@ -40,8 +41,8 @@ function isDrop(value: unknown): value is Drop {
   );
 }
 
-async function fetchDrops(): Promise<Drop[]> {
-  const response = await fetch("/api/drops", { cache: "no-store" });
+async function fetchDrops(endpoint: "/api/drops" | "/api/admin/drops"): Promise<Drop[]> {
+  const response = await fetch(endpoint, { cache: "no-store" });
   if (!response.ok) {
     throw new Error("No fue posible cargar los Drops");
   }
@@ -62,19 +63,21 @@ export function DropsProvider({
   children: ReactNode;
 }) {
   const [drops, setDrops] = useState(initialDrops);
+  const pathname = usePathname();
+  const endpoint = pathname.startsWith("/admin") ? "/api/admin/drops" : "/api/drops";
 
   const refreshDrops = useCallback(async (): Promise<Drop[]> => {
-    const confirmedDrops = await fetchDrops();
+    const confirmedDrops = await fetchDrops(endpoint);
     setDrops(confirmedDrops);
     return confirmedDrops;
-  }, []);
+  }, [endpoint]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function refresh() {
       try {
-        const confirmedDrops = await fetchDrops();
+        const confirmedDrops = await fetchDrops(endpoint);
         if (!cancelled) setDrops(confirmedDrops);
       } catch {
         // The server-rendered database result remains available if a refresh fails.
@@ -85,7 +88,7 @@ export function DropsProvider({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [endpoint]);
 
   return <DropsContext.Provider value={{ drops, refreshDrops }}>{children}</DropsContext.Provider>;
 }

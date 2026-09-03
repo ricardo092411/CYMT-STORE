@@ -2,11 +2,18 @@ import type { Metadata } from "next";
 import { ProductPageClient } from "@/components/product/product-page-client";
 import {
   getPrimaryProductImageUrl,
+  getPublicProductWithVariantsBySlug,
   getProductWithVariantsBySlug,
 } from "@/lib/products";
+import { isAdmin } from "@/lib/auth/admin";
 import { normalizeProduct } from "@/lib/product-normalizer";
 
 export const dynamic = "force-dynamic";
+
+async function getVisibleProduct(slug: string) {
+  if (await isAdmin()) return getProductWithVariantsBySlug(slug);
+  return getPublicProductWithVariantsBySlug(slug);
+}
 
 export async function generateMetadata({
   params,
@@ -14,11 +21,11 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const product = await getProductWithVariantsBySlug(slug);
+  const product = await getVisibleProduct(slug);
   if (!product) {
     return {
       title: "Producto",
-      robots: { index: false, follow: true },
+      robots: { index: false, follow: false },
     };
   }
   const primaryImage = getPrimaryProductImageUrl(product);
@@ -48,7 +55,7 @@ export default async function ProductPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const product = await getProductWithVariantsBySlug(slug);
+  const product = await getVisibleProduct(slug);
   const seed = product ? normalizeProduct(product) : null;
   return <ProductPageClient slug={slug} seed={seed} />;
 }

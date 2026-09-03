@@ -30,6 +30,16 @@ export async function getDrops(): Promise<Drop[]> {
   return rows.map(toDrop);
 }
 
+/** Public runtime source: hidden Drops must not be exposed to visitors. */
+export async function getLiveDrops(): Promise<Drop[]> {
+  const rows = await db
+    .select()
+    .from(drops)
+    .where(eq(drops.live, true))
+    .orderBy(asc(drops.id));
+  return rows.map(toDrop);
+}
+
 export async function getDropBySlug(slug: string): Promise<Drop | null> {
   const rows = await db
     .select()

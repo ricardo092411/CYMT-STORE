@@ -11,7 +11,7 @@ import { Footer } from "@/components/layout/footer";
 import { FloatingSocial } from "@/components/layout/floating-social";
 import { GlobalChrome } from "@/components/layout/global-chrome";
 import { site } from "@/data/site";
-import { getDrops } from "@/lib/drops";
+import { getLiveDrops } from "@/lib/drops";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -80,7 +80,7 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const drops = await getDrops();
+  const drops = await getLiveDrops();
 
   return (
     <html lang="es" className={`${inter.variable} ${grotesk.variable}`} suppressHydrationWarning>

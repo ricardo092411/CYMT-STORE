@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { getDrops } from "@/lib/drops";
+import { getLiveDrops } from "@/lib/drops";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json(await getDrops());
+  return NextResponse.json(await getLiveDrops());
 }
