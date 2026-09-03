@@ -19,6 +19,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ImagePlus, Images, Pencil, Star, Trash2, X } from "lucide-react";
 import { useEditor } from "@/providers/editor-provider";
 import { cn } from "@/lib/utils";
+import { hasCompositeColorName } from "@/lib/suspicious-variants";
 import type { Product } from "@/data/catalog";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
@@ -331,6 +332,8 @@ export function EditorPanel() {
   const description = product?.description ?? "";
   const type = product?.type ?? "";
   const status = product?.status ?? "nuevo";
+  const hasCompositeOriginalColor =
+    product?.productVariants?.some((variant) => hasCompositeColorName(variant.colorName)) ?? false;
 
   const [priceText, setPriceText] = useState("");
   useEffect(() => {
@@ -644,6 +647,13 @@ export function EditorPanel() {
                   Sube un mockup y escribe su color aquí. Los mockups con el mismo color se
                   guardan dentro de una sola variante.
                 </p>
+
+                {hasCompositeOriginalColor && (
+                  <p className="mb-3 rounded-xl border border-brand/30 bg-brand-soft px-3 py-2 text-xs leading-relaxed text-brand">
+                    Esta variante contiene varios colores. Asigna el color correcto a cada mockup
+                    antes de guardar.
+                  </p>
+                )}
 
                 {visibleImageDrafts.length > 0 ? (
                   <div className="grid grid-cols-1 gap-3">

@@ -4,6 +4,7 @@ import { Package, Tag, Image as ImageIcon, LayoutGrid, DollarSign, Boxes, LogOut
 import { Container } from "@/components/ui";
 import { DropsBulkOrganizer } from "@/components/admin/drops-bulk-organizer";
 import { DropCoverManager } from "@/components/admin/drop-cover-manager";
+import { SuspiciousVariantsReview } from "@/components/admin/suspicious-variants-review";
 import { allTypes } from "@/data/catalog";
 import { useLiveProducts } from "@/providers/editor-provider";
 import { useDrops } from "@/providers/drops-provider";
@@ -66,6 +67,7 @@ export default function AdminPage() {
         ))}
       </div>
 
+      <SuspiciousVariantsReview />
       <DropsBulkOrganizer />
       <DropCoverManager />
 
