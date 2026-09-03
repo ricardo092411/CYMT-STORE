@@ -688,7 +688,7 @@ function toDatabaseId(id: string): number | null {
 
 export function EditorProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const enabled = EDIT_MODE && pathname.startsWith("/admin");
+  const enabled = EDIT_MODE && pathname.startsWith("/admin") && pathname !== "/admin/login";
   const [logoSrc, setLogoSrc] = useState<string | null>(null);
   const [databaseProducts, setDatabaseProducts] = useState<Product[]>([]);
   const databaseProductsRef = useRef<Product[]>([]);
