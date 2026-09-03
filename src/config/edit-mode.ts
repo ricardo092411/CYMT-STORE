@@ -4,7 +4,7 @@
  * Interruptor de compatibilidad del modo administración.
  *
  *   EDIT_MODE = true   → permite que EditorProvider habilite controles
- *                        únicamente bajo /admin.
+ *                        después de confirmar una sesión admin en servidor.
  *
  *   EDIT_MODE = false  → la tienda se ve EXACTAMENTE igual que siempre.
  *                        Cero botones extra, cero herramientas, cero cambios.

@@ -9,7 +9,8 @@
  * - productos eliminados (soft-delete sobre el catálogo base)
  *
  * Persistido en localStorage — mismo patrón que carrito y favoritos.
- * Los controles solo se habilitan bajo /admin; el catálogo vivo sigue global.
+ * Los controles se habilitan tras confirmar la sesión administrativa en servidor;
+ * el catálogo vivo sigue global.
  */
 
 import {
@@ -51,6 +52,7 @@ export interface ProductOverride {
 
 type OverridesMap = Record<string, ProductOverride>;
 const EMPTY_OVERRIDES: OverridesMap = {};
+type AdminSessionState = "checking" | "admin" | "public";
 
 type ProductVariantImageReplacement = Omit<
   ProductVariantImage,
@@ -524,7 +526,17 @@ function toDatabaseId(id: string): number | null {
 
 export function EditorProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const enabled = EDIT_MODE && pathname.startsWith("/admin") && pathname !== "/admin/login";
+  const isAdminLoginRoute = pathname === "/admin/login";
+  const [adminSessionState, setAdminSessionState] = useState<AdminSessionState>("checking");
+  const sessionCheckIdRef = useRef(0);
+  const needsSessionCheckRef = useRef(true);
+  const enabled = EDIT_MODE && adminSessionState === "admin" && !isAdminLoginRoute;
+  const productEndpoint =
+    isAdminLoginRoute || (adminSessionState === "checking" && pathname.startsWith("/admin"))
+      ? null
+      : enabled
+        ? "/api/admin/products"
+        : "/api/products";
   const [logoSrc, setLogoSrc] = useState<string | null>(null);
   const [databaseProducts, setDatabaseProducts] = useState<Product[]>([]);
   const databaseProductsRef = useRef<Product[]>([]);
@@ -546,7 +558,53 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     persistedProductsRef.current = replaceProduct(persistedProductsRef.current, productId, product);
   }, []);
 
-  /* Cargar estado guardado solo dentro de la ruta administrativa. */
+  /* La visibilidad del editor siempre proviene de una comprobación server-side. */
+  useEffect(() => {
+    if (!EDIT_MODE || isAdminLoginRoute) {
+      sessionCheckIdRef.current += 1;
+      needsSessionCheckRef.current = true;
+      setAdminSessionState("public");
+      return;
+    }
+
+    if (!needsSessionCheckRef.current) return;
+
+    needsSessionCheckRef.current = false;
+    const sessionCheckId = ++sessionCheckIdRef.current;
+    setAdminSessionState("checking");
+
+    async function checkAdminSession() {
+      try {
+        const response = await fetch("/api/admin/session", { cache: "no-store" });
+        const data: unknown = await response.json();
+        const isConfirmedAdmin =
+          response.ok &&
+          isRecord(data) &&
+          data.isAdmin === true;
+
+        if (sessionCheckId === sessionCheckIdRef.current) {
+          setAdminSessionState(isConfirmedAdmin ? "admin" : "public");
+        }
+      } catch {
+        if (sessionCheckId === sessionCheckIdRef.current) {
+          setAdminSessionState("public");
+        }
+      }
+    }
+
+    void checkAdminSession();
+  }, [isAdminLoginRoute]);
+
+  /* Si la sesión deja de estar confirmada, cerrar y ocultar toda UI de edición. */
+  useEffect(() => {
+    if (enabled) return;
+
+    setActiveId(null);
+    setLogoSrc(null);
+    setOverrides({});
+  }, [enabled]);
+
+  /* Cargar estado guardado solo para una sesión administrativa confirmada. */
   useEffect(() => {
     if (!enabled) {
       setHydrated(true);
@@ -573,13 +631,17 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
   /* Cargar el catálogo base desde PostgreSQL mediante la API existente. */
   useEffect(() => {
+    if (productEndpoint === null) return;
+    const endpoint =
+      productEndpoint === "/api/admin/products"
+        ? "/api/admin/products"
+        : "/api/products";
+
     let cancelled = false;
 
     async function loadProducts() {
       try {
-        const products = await fetchConfirmedProducts(
-          enabled ? "/api/admin/products" : "/api/products",
-        );
+        const products = await fetchConfirmedProducts(endpoint);
         if (cancelled) return;
 
         databaseProductsRef.current = products;
@@ -595,7 +657,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [enabled]);
+  }, [productEndpoint]);
 
   /* Persistir cambios */
   useEffect(() => {
@@ -991,7 +1053,7 @@ export function useEditor(): EditorContextValue {
 
 /**
  * Fusiona un producto del catálogo con su override del editor.
- * Fuera de /admin no aplica overrides locales al storefront.
+ * Sin una sesión administrativa confirmada no aplica overrides locales al storefront.
  */
 export function useEditedProduct(product: Product): Product {
   const { enabled, overrides, liveProducts } = useEditor();

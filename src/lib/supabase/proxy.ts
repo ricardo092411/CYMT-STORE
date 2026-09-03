@@ -54,6 +54,7 @@ export async function updateSession(request: NextRequest) {
     pathname !== "/admin/login";
 
   const isAdminApi = pathname === "/api/admin" || pathname.startsWith("/api/admin/");
+  const isAdminSessionApi = pathname === "/api/admin/session";
 
   // Protege el panel visual.
   if (isAdminPage && !isAdmin) {
@@ -65,7 +66,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   // Primera barrera para las APIs administrativas.
-  if (isAdminApi && !isAdmin) {
+  if (isAdminApi && !isAdmin && !isAdminSessionApi) {
     return NextResponse.json(
       { error: "No autorizado" },
       { status: 401 }
