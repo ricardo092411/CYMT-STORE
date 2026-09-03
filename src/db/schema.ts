@@ -19,6 +19,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   integer,
   jsonb,
   numeric,
@@ -45,6 +46,27 @@ export const drops = pgTable("drops", {
   releaseDate: timestamp("release_date", { mode: "date" }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+/* --------------------------- Home hero --------------------------- */
+
+/** Singleton configuration for the public Home Hero. The app always uses id=1. */
+export const homeHero = pgTable(
+  "home_hero",
+  {
+    id: integer("id").primaryKey(),
+    badge: varchar("badge", { length: 160 }).notNull(),
+    titlePrefix: varchar("title_prefix", { length: 180 }).notNull(),
+    titleHighlight: varchar("title_highlight", { length: 180 }).notNull(),
+    description: text("description").notNull(),
+    primaryLabel: varchar("primary_label", { length: 80 }).notNull(),
+    primaryHref: varchar("primary_href", { length: 300 }).notNull(),
+    secondaryLabel: varchar("secondary_label", { length: 80 }).notNull(),
+    imageUrl: text("image_url"),
+    imageAlt: varchar("image_alt", { length: 200 }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [check("home_hero_singleton_id_check", sql`${table.id} = 1`)],
+);
 
 /* ---------------------------- Products --------------------------- */
 

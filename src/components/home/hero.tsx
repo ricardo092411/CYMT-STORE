@@ -5,6 +5,7 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { useStore } from "@/providers/store-provider";
+import type { HomeHero } from "@/types/home-hero";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -17,15 +18,16 @@ const item = {
   show: { opacity: 1, y: 0, transition: { duration: 0.8, ease: EASE } },
 };
 
-export function Hero() {
+export function Hero({ hero }: { hero: HomeHero }) {
   const { setClubOpen } = useStore();
+  const imageSource = hero.imageUrl ?? "/images/hero/hero-main.jpg";
 
   return (
     <section className="relative flex min-h-[92vh] items-center overflow-hidden">
       {/* Background */}
       <Image
-        src="/images/hero/hero-main.jpg"
-        alt="CYMT STORE — streetwear premium "
+        src={imageSource}
+        alt={hero.imageAlt}
         fill
         priority
         sizes="100vw"
@@ -40,7 +42,7 @@ export function Hero() {
           <motion.div variants={item}>
             <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface/60 px-3.5 py-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-ink-soft backdrop-blur">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />
-              El Salvador · Entregas en 48 Horas
+              {hero.badge}
             </span>
           </motion.div>
 
@@ -48,20 +50,19 @@ export function Hero() {
             variants={item}
             className="mt-6 font-display text-5xl font-bold leading-[0.95] tracking-tight text-balance sm:text-6xl lg:text-7xl"
           >
-            Tu Personalidad Merece <span className="text-brand">Diseños Exclusivos.</span>
+            {hero.titlePrefix} <span className="text-brand">{hero.titleHighlight}</span>
           </motion.h1>
 
           <motion.p variants={item} className="mt-6 max-w-xl text-lg leading-relaxed text-ink-soft">
-            CYMT STORE — streetwear premium diseñado en El Salvador. Drops exclusivos de Anime,
-            Rock, Naturaleza, Retro y Mas. Entregas En 48 Horas.
+            {hero.description}
           </motion.p>
 
           <motion.div variants={item} className="mt-9 flex flex-wrap items-center gap-3">
             <Link
-              href="/tienda"
+              href={hero.primaryHref}
               className="group inline-flex items-center gap-2 rounded-full bg-brand px-7 py-3.5 text-sm font-semibold text-white shadow-[0_16px_44px_-12px_rgba(229,9,20,0.85)] transition hover:bg-brand-bright"
             >
-              Explorar Drops
+              {hero.primaryLabel}
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
             </Link>
             <button
@@ -69,7 +70,7 @@ export function Hero() {
               className="inline-flex items-center gap-2 rounded-full border border-line-strong bg-surface/50 px-7 py-3.5 text-sm font-semibold text-ink backdrop-blur transition hover:bg-surface-2"
             >
               <Sparkles className="h-4 w-4 text-brand" />
-              Únete al Club
+              {hero.secondaryLabel}
             </button>
           </motion.div>
         </motion.div>

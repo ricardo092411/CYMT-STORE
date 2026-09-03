@@ -5,6 +5,7 @@ import { Container } from "@/components/ui";
 import { DropsBulkOrganizer } from "@/components/admin/drops-bulk-organizer";
 import { DropCoverManager } from "@/components/admin/drop-cover-manager";
 import { DropManager } from "@/components/admin/drop-manager";
+import { HomeHeroManager } from "@/components/admin/home-hero-manager";
 import { SuspiciousVariantsReview } from "@/components/admin/suspicious-variants-review";
 import { allTypes } from "@/data/catalog";
 import { useLiveProducts } from "@/providers/editor-provider";
@@ -32,7 +33,6 @@ export default function AdminPage() {
     { icon: Package, title: "Productos", desc: "Crear, editar y despublicar productos." },
     { icon: DollarSign, title: "Precios y ofertas", desc: "Ajustar precios, compare-at y estados." },
     { icon: ImageIcon, title: "Imágenes", desc: "Subir y ordenar mockups por producto." },
-    { icon: Tag, title: "Banners", desc: "Gestionar banners del home y drops." },
   ];
 
   return (
@@ -67,6 +67,7 @@ export default function AdminPage() {
         ))}
       </div>
 
+      <HomeHeroManager />
       <SuspiciousVariantsReview />
       <DropManager />
       <DropsBulkOrganizer />

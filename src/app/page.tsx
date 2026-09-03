@@ -6,6 +6,7 @@ import { ClubCta } from "@/components/home/club-cta";
 import { Container } from "@/components/ui";
 import { Reveal } from "@/components/ui/reveal";
 import { site } from "@/data/site";
+import { getHomeHero } from "@/lib/home-hero";
 
 const marqueeItems = [
   site.name,
@@ -16,10 +17,14 @@ const marqueeItems = [
   "Envíos a todo el país",
 ];
 
-export default function HomePage() {
+export const dynamic = "force-dynamic";
+
+export default async function HomePage() {
+  const hero = await getHomeHero();
+
   return (
     <>
-      <Hero />
+      <Hero hero={hero} />
       <Marquee items={marqueeItems} className="border-y border-line bg-black py-3.5" />
 
       <DropsSection />
