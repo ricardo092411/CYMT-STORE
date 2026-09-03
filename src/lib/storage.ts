@@ -8,6 +8,73 @@ export type UploadedProductImage = {
   originalFilename: string;
 };
 
+type SignedProductImageUploadAuthorization = UploadedProductImage & {
+  token: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+async function responseError(response: Response, fallback: string): Promise<string> {
+  try {
+    const data: unknown = await response.json();
+    if (isRecord(data) && typeof data.error === "string" && data.error.trim()) {
+      return data.error;
+    }
+  } catch {
+    // Se conserva el mensaje de respaldo cuando la respuesta no tiene JSON.
+  }
+
+  return fallback;
+}
+
+function toSignedProductImageUploadAuthorization(
+  value: unknown,
+): SignedProductImageUploadAuthorization | null {
+  if (
+    !isRecord(value) ||
+    typeof value.storageKey !== "string" ||
+    typeof value.token !== "string" ||
+    typeof value.publicUrl !== "string" ||
+    typeof value.originalFilename !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    storageKey: value.storageKey,
+    token: value.token,
+    publicUrl: value.publicUrl,
+    originalFilename: value.originalFilename,
+  };
+}
+
+async function requestSignedProductImageUpload(
+  file: File,
+): Promise<SignedProductImageUploadAuthorization> {
+  const response = await fetch("/api/admin/products/images/upload", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      filename: file.name,
+      contentType: file.type,
+      size: file.size,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await responseError(response, "No fue posible autorizar la subida de imagen"));
+  }
+
+  const authorization = toSignedProductImageUploadAuthorization(await response.json());
+  if (!authorization) {
+    throw new Error("La autorización de subida de imagen no es válida");
+  }
+
+  return authorization;
+}
+
 export function getProductImagePublicUrl(storageKey: string): string {
   const { data } = supabase.storage
     .from(PRODUCT_IMAGES_BUCKET)
@@ -17,21 +84,23 @@ export function getProductImagePublicUrl(storageKey: string): string {
 }
 
 export async function uploadProductImage(file: File): Promise<UploadedProductImage> {
-  const extension = file.name.split(".").pop();
-  const storageKey = `${crypto.randomUUID()}.${extension}`;
-
+  const authorization = await requestSignedProductImageUpload(file);
   const { error } = await supabase.storage
     .from(PRODUCT_IMAGES_BUCKET)
-    .upload(storageKey, file);
+    .uploadToSignedUrl(authorization.storageKey, authorization.token, file, {
+      upsert: false,
+      contentType: file.type,
+      cacheControl: "31536000",
+    });
 
   if (error) {
     throw error;
   }
 
   return {
-    storageKey,
-    publicUrl: getProductImagePublicUrl(storageKey),
-    originalFilename: file.name,
+    storageKey: authorization.storageKey,
+    publicUrl: authorization.publicUrl,
+    originalFilename: authorization.originalFilename,
   };
 }
 
