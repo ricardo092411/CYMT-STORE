@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Pool } from "pg";
@@ -9,6 +9,15 @@ import { hasCompositeColorName } from "../src/lib/suspicious-variants";
 
 type ImportMode = "dry-run" | "execute";
 type ProductReference = { candidateId: string; storageSlug: string };
+type ImportCounts = { products: number; variants: number; images: number };
+
+type CliOptions = {
+  mode: ImportMode;
+  packagePath: string;
+  sourceRoot: string;
+  auditDirectory: string;
+  approvalToken?: string;
+};
 
 type ImagePlan = {
   sourcePath: string;
@@ -17,6 +26,7 @@ type ImagePlan = {
   sha256: string;
   position: number;
   isCover: boolean;
+  variantPosition: number;
   productReference: ProductReference;
   label: string;
 };
@@ -90,7 +100,9 @@ type StoragePreflight = {
 };
 
 type Preflight = {
+  cli: CliOptions;
   mode: ImportMode;
+  packageSha256: string | null;
   batchId: string;
   batchPrefix: string;
   candidateProducts: ProductPlan[];
@@ -98,11 +110,14 @@ type Preflight = {
   images: ImagePlan[];
   sourceImages: SourceImageCheck[];
   uploads: UploadPlan[];
-  expectedCounts: { products: number; variants: number; images: number };
-  packageCounts: { products: number; variants: number; images: number };
+  expectedCounts: ImportCounts;
+  packageCounts: ImportCounts;
   hashesValid: number;
+  imageSignaturesValid: number;
   missingFiles: string[];
   hashMismatches: string[];
+  imageSignatureMismatches: string[];
+  resolvedSourcePaths: Map<string, string>;
   blockers: string[];
   warnings: string[];
   database: DatabasePreflight;
@@ -118,22 +133,89 @@ type CreatedRecords = {
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(scriptDirectory, "..");
-const packagePath = "D:/temp/cymt-final-import-package-v3-20260817230351552/final-import-package-v3.json";
-const sourceImageRoot = resolve(projectRoot, "public", "images", "collections");
-const auditDirectory = "D:/temp/cymt-import-results";
 const productImagesBucket = "product-images";
-const expectedCounts = { products: 103, variants: 117, images: 274 };
+const maximumRecordsPerKind = 100_000;
 
 dotenv.config({ path: resolve(projectRoot, ".env.local"), quiet: true });
 dotenv.config({ path: resolve(projectRoot, ".env"), quiet: true });
 
-function parseMode(): ImportMode {
+function usage(): string {
+  return [
+    "Usage:",
+    "  npm run import:product-library -- --dry-run --package <package.json> [--source-root <directory>] [--audit-dir <directory>]",
+    "  npm run import:product-library -- --execute --package <package.json> --approval-token <sha256> [--source-root <directory>] [--audit-dir <directory>]",
+  ].join("\n");
+}
+
+function resolveCliPath(value: string): string {
+  return resolve(isAbsolute(value) ? value : resolve(projectRoot, value));
+}
+
+function parseCli(): CliOptions {
   const args = process.argv.slice(2);
-  if (args.length !== 1 || (args[0] !== "--dry-run" && args[0] !== "--execute")) {
-    throw new Error("Usage: tsx scripts/import-product-library.ts --dry-run|--execute");
+  let mode: ImportMode | undefined;
+  let packageValue: string | undefined;
+  let sourceRootValue: string | undefined;
+  let auditDirectoryValue: string | undefined;
+  let approvalToken: string | undefined;
+
+  const requireValue = (flag: string, index: number): string => {
+    const value = args[index + 1];
+    if (!value || value.startsWith("--") || value.trim().length === 0) {
+      throw new Error(`${flag} requires a non-empty value.\n${usage()}`);
+    }
+    return value;
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === "--dry-run" || argument === "--execute") {
+      const requestedMode: ImportMode = argument === "--dry-run" ? "dry-run" : "execute";
+      if (mode) throw new Error(`Specify exactly one mode.\n${usage()}`);
+      mode = requestedMode;
+      continue;
+    }
+
+    if (argument === "--package" || argument === "--source-root" || argument === "--audit-dir" || argument === "--approval-token") {
+      const value = requireValue(argument, index);
+      index += 1;
+      if (argument === "--package") {
+        if (packageValue !== undefined) throw new Error(`--package may be specified only once.\n${usage()}`);
+        packageValue = value;
+      } else if (argument === "--source-root") {
+        if (sourceRootValue !== undefined) throw new Error(`--source-root may be specified only once.\n${usage()}`);
+        sourceRootValue = value;
+      } else if (argument === "--audit-dir") {
+        if (auditDirectoryValue !== undefined) throw new Error(`--audit-dir may be specified only once.\n${usage()}`);
+        auditDirectoryValue = value;
+      } else {
+        if (approvalToken !== undefined) throw new Error(`--approval-token may be specified only once.\n${usage()}`);
+        approvalToken = value;
+      }
+      continue;
+    }
+
+    throw new Error(`Unknown argument: ${argument}.\n${usage()}`);
   }
 
-  return args[0] === "--dry-run" ? "dry-run" : "execute";
+  if (!mode || !packageValue) throw new Error(`Both a mode and --package are required.\n${usage()}`);
+  if (mode === "dry-run" && approvalToken !== undefined) {
+    throw new Error(`--approval-token is accepted only with --execute.\n${usage()}`);
+  }
+  if (mode === "execute") {
+    if (!approvalToken) throw new Error(`--execute requires --approval-token from a passing dry-run.\n${usage()}`);
+    if (!/^[a-f0-9]{64}$/.test(approvalToken)) {
+      throw new Error(`--approval-token must be an exact lowercase SHA-256 digest.\n${usage()}`);
+    }
+  }
+
+  return {
+    mode,
+    packagePath: resolveCliPath(packageValue),
+    sourceRoot: resolveCliPath(sourceRootValue ?? projectRoot),
+    auditDirectory: resolveCliPath(auditDirectoryValue ?? resolve(projectRoot, "import-results")),
+    approvalToken,
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -285,10 +367,99 @@ function normalizedText(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
+function normalizedProductNameTypeKey(name: unknown, type: unknown): string {
+  return `${normalizedText(name)}\u0000${normalizedText(type)}`;
+}
+
 function uniqueDuplicates(values: string[]): string[] {
   const counts = new Map<string, number>();
   for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
   return [...counts].filter(([, count]) => count > 1).map(([value]) => value);
+}
+
+function isSafeStorageSegment(value: string): boolean {
+  return (
+    /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value) &&
+    !value.includes("..") &&
+    !/[\u0000-\u001f\u007f]/.test(value)
+  );
+}
+
+function isSafeRelativeSourcePath(value: string): boolean {
+  if (
+    value.length === 0 ||
+    isAbsolute(value) ||
+    value.includes("\\") ||
+    /[\u0000-\u001f\u007f]/.test(value) ||
+    value.includes(":")
+  ) {
+    return false;
+  }
+
+  const parts = value.split("/");
+  return parts.every((part) => part.length > 0 && part !== "." && part !== "..");
+}
+
+function pathIsStrictlyWithinRoot(root: string, target: string): boolean {
+  const pathFromRoot = relative(root, target);
+  return (
+    pathFromRoot.length > 0 &&
+    !isAbsolute(pathFromRoot) &&
+    pathFromRoot !== ".." &&
+    !pathFromRoot.startsWith("..\\") &&
+    !pathFromRoot.startsWith("../")
+  );
+}
+
+function resolveSourcePath(sourceRoot: string, sourcePath: string): string | null {
+  if (!isSafeRelativeSourcePath(sourcePath)) return null;
+  const resolvedPath = resolve(sourceRoot, sourcePath);
+  return pathIsStrictlyWithinRoot(sourceRoot, resolvedPath) ? resolvedPath : null;
+}
+
+function supportedImageExtension(filename: string): "jpeg" | "png" | "webp" | null {
+  switch (extname(filename).toLowerCase()) {
+    case ".jpg":
+    case ".jpeg":
+      return "jpeg";
+    case ".png":
+      return "png";
+    case ".webp":
+      return "webp";
+    default:
+      return null;
+  }
+}
+
+function detectImageSignature(bytes: Uint8Array): "jpeg" | "png" | "webp" | null {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "jpeg";
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return "png";
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return "webp";
+  }
+  return null;
 }
 
 function storagePathIsSafe(storageKey: string): boolean {
@@ -305,10 +476,12 @@ function createBatchId(): string {
   return `cymt-${timestamp}-${randomUUID()}`;
 }
 
-function makeEmptyPreflight(mode: ImportMode): Preflight {
+function makeEmptyPreflight(cli: CliOptions): Preflight {
   const batchId = createBatchId();
   return {
-    mode,
+    cli,
+    mode: cli.mode,
+    packageSha256: null,
     batchId,
     batchPrefix: `imports/${batchId}`,
     candidateProducts: [],
@@ -316,11 +489,14 @@ function makeEmptyPreflight(mode: ImportMode): Preflight {
     images: [],
     sourceImages: [],
     uploads: [],
-    expectedCounts,
+    expectedCounts: { products: 0, variants: 0, images: 0 },
     packageCounts: { products: 0, variants: 0, images: 0 },
     hashesValid: 0,
+    imageSignaturesValid: 0,
     missingFiles: [],
     hashMismatches: [],
+    imageSignatureMismatches: [],
+    resolvedSourcePaths: new Map(),
     blockers: [],
     warnings: [],
     database: {
@@ -376,11 +552,18 @@ function validateImage(
   if (!/^[a-f0-9]{64}$/i.test(sha256)) {
     addBlocker(preflight, `${label}.sha256 is not a SHA-256 hexadecimal digest.`);
   }
-  if (extname(originalFilename).length === 0) {
-    addBlocker(preflight, `${label}.originalFilename has no extension to preserve.`);
+  const originalImageType = supportedImageExtension(originalFilename);
+  if (!originalImageType) {
+    addBlocker(preflight, `${label}.originalFilename must use .jpg, .jpeg, .png, or .webp.`);
+  }
+  if (extname(sourcePath).toLowerCase() !== extname(originalFilename).toLowerCase()) {
+    addBlocker(preflight, `${label}.sourcePath extension must match originalFilename.`);
   }
   if (sourcePath !== originalSourcePath) {
     addBlocker(preflight, `${label} sourcePath and originalSourcePath must match exactly.`);
+  }
+  if (!isSafeRelativeSourcePath(sourcePath)) {
+    addBlocker(preflight, `${label}.sourcePath must be a safe relative path with forward slashes inside --source-root.`);
   }
 
   preflight.sourceImages.push({ sourcePath, sha256: sha256.toLowerCase(), label });
@@ -392,6 +575,7 @@ function validateImage(
     sha256: sha256.toLowerCase(),
     position,
     isCover,
+    variantPosition: 0,
     productReference,
     label,
   };
@@ -438,7 +622,7 @@ function validateVariant(
     position,
     isDefault,
     productReference,
-    images,
+    images: images.map((image) => ({ ...image, variantPosition: position })),
     label,
   };
 }
@@ -465,6 +649,9 @@ function validateCandidateProduct(
   }
 
   if (!candidateId || !slug || !name || !type || price === null) return null;
+  if (!isSafeStorageSegment(candidateId)) {
+    addBlocker(preflight, `${label}.candidateId is not safe for an isolated Storage key.`);
+  }
   if (slug.includes("/") || slug.includes("\\") || slug === "." || slug === "..") {
     addBlocker(preflight, `${label}.suggestedSlug is not safe for an isolated Storage path.`);
   }
@@ -488,31 +675,79 @@ function validateCandidateProduct(
   return { candidateId, slug, name, type, price, variants };
 }
 
-function validatePackageMetadata(preflight: Preflight, root: Record<string, unknown>): void {
+function validateCount(
+  preflight: Preflight,
+  value: unknown,
+  label: string,
+  expected: number,
+): void {
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value > maximumRecordsPerKind
+  ) {
+    addBlocker(preflight, `${label} must be a non-negative integer no greater than ${maximumRecordsPerKind}.`);
+    return;
+  }
+  if (value !== expected) addBlocker(preflight, `${label} must equal the detected count ${expected}.`);
+}
+
+function validatePackageMetadata(
+  preflight: Preflight,
+  root: Record<string, unknown>,
+  actualCounts: ImportCounts,
+): void {
   if (root.packageVersion !== "3") {
     addBlocker(preflight, "Package packageVersion must be 3.");
   }
   if (root.readyForDryRun !== true) {
     addBlocker(preflight, "Package readyForDryRun must be true.");
   }
-  if (!Array.isArray(root.pendingExistingGroupAssociations) || root.pendingExistingGroupAssociations.length !== 0) {
+  if (
+    root.pendingExistingGroupAssociations !== undefined &&
+    (!Array.isArray(root.pendingExistingGroupAssociations) || root.pendingExistingGroupAssociations.length !== 0)
+  ) {
     addBlocker(preflight, "Package pendingExistingGroupAssociations must be an empty array.");
   }
-  if (!isRecord(root.associationReconciliation)) {
-    addBlocker(preflight, "Package associationReconciliation is missing.");
-  } else {
-    const reconciliation = root.associationReconciliation;
-    if (
-      reconciliation.associationsTotal !== 31 ||
-      reconciliation.associationsResolvedIntoExistingProducts !== 14 ||
-      reconciliation.associationsMaterializedAsNewProducts !== 17 ||
-      reconciliation.associationsBlocked !== 0
-    ) {
-      addBlocker(preflight, "Package associationReconciliation does not describe the approved 14+17 complete materialization.");
+
+  let materializedAssociationCount: number | null = null;
+  if (root.associationReconciliation !== undefined) {
+    if (!isRecord(root.associationReconciliation)) {
+      addBlocker(preflight, "Package associationReconciliation must be an object when supplied.");
+    } else {
+      const reconciliation = root.associationReconciliation;
+      const fields = [
+        "associationsTotal",
+        "associationsResolvedIntoExistingProducts",
+        "associationsMaterializedAsNewProducts",
+        "associationsBlocked",
+      ] as const;
+      const values = fields.map((field) => {
+        const value = requiredNonNegativeInteger(preflight, reconciliation[field], `Package associationReconciliation.${field}`);
+        return value;
+      });
+      const [total, resolved, materialized, blocked] = values;
+      materializedAssociationCount = materialized;
+      if (total !== null && resolved !== null && materialized !== null && blocked !== null) {
+        if (total !== resolved + materialized + blocked) {
+          addBlocker(preflight, "Package associationReconciliation totals are not mathematically coherent.");
+        }
+        if (blocked !== 0) {
+          addBlocker(preflight, "Package associationReconciliation.associationsBlocked must be 0 for this insert-only importer.");
+        }
+      }
     }
   }
-  if (!Array.isArray(root.newProductMaterializations) || root.newProductMaterializations.length !== 17) {
-    addBlocker(preflight, "Package must contain exactly 17 newProductMaterializations.");
+  if (root.newProductMaterializations !== undefined) {
+    if (!Array.isArray(root.newProductMaterializations)) {
+      addBlocker(preflight, "Package newProductMaterializations must be an array when supplied.");
+    } else if (
+      materializedAssociationCount !== null &&
+      root.newProductMaterializations.length !== materializedAssociationCount
+    ) {
+      addBlocker(preflight, "Package newProductMaterializations length must match associationReconciliation.associationsMaterializedAsNewProducts.");
+    }
   }
 
   if (!isRecord(root.validation)) {
@@ -521,19 +756,18 @@ function validatePackageMetadata(preflight: Preflight, root: Record<string, unkn
   }
 
   const validation = root.validation;
-  if (!isRecord(validation.counts)) {
-    addBlocker(preflight, "Package validation.counts is missing.");
-  } else {
-    const expectedValidation = [
-      ["products", expectedCounts.products],
-      ["variants", expectedCounts.variants],
-      ["images", expectedCounts.images],
-      ["expectedSourcePaths", expectedCounts.images],
-      ["matchingHashes", expectedCounts.images],
-    ] as const;
-    for (const [field, expectedValue] of expectedValidation) {
-      if (validation.counts[field] !== expectedValue) {
-        addBlocker(preflight, `Package validation.counts.${field} must equal ${expectedValue}.`);
+  if (validation.counts !== undefined) {
+    if (!isRecord(validation.counts)) {
+      addBlocker(preflight, "Package validation.counts must be an object when supplied.");
+    } else {
+      const counts = validation.counts;
+      for (const [field, expectedValue] of Object.entries(actualCounts) as Array<[keyof ImportCounts, number]>) {
+        validateCount(preflight, counts[field], `Package validation.counts.${field}`, expectedValue);
+      }
+      for (const field of ["expectedSourcePaths", "matchingHashes"] as const) {
+        if (counts[field] !== undefined) {
+          validateCount(preflight, counts[field], `Package validation.counts.${field}`, actualCounts.images);
+        }
       }
     }
   }
@@ -558,13 +792,31 @@ function countPackageRecords(products: unknown[]): {
   return { products: products.length, variants: variants.length, images: images.length };
 }
 
+function packageImageFieldValues(products: unknown[], field: "sourcePath" | "sha256"): string[] {
+  return products.flatMap((product) =>
+    isRecord(product)
+      ? toArray(product.variants).flatMap((variant) =>
+        isRecord(variant)
+          ? toArray(variant.images).flatMap((image) => isRecord(image) && typeof image[field] === "string" ? [image[field]] : [])
+          : [],
+      )
+      : [],
+  );
+}
+
 async function readAndValidatePackage(preflight: Preflight): Promise<void> {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(await readFile(packagePath, "utf8")) as unknown;
+    const rawPackage = await readFile(preflight.cli.packagePath);
+    preflight.packageSha256 = createHash("sha256").update(rawPackage).digest("hex");
+    parsed = JSON.parse(rawPackage.toString("utf8")) as unknown;
   } catch (error) {
     addBlocker(preflight, `Unable to read approved package: ${sanitizeError(error)}`);
     return;
+  }
+
+  if (preflight.mode === "execute" && preflight.cli.approvalToken !== preflight.packageSha256) {
+    addBlocker(preflight, "Approval token does not match the SHA-256 of the supplied package; execute is blocked before writes.");
   }
 
   if (!isRecord(parsed)) {
@@ -572,21 +824,17 @@ async function readAndValidatePackage(preflight: Preflight): Promise<void> {
     return;
   }
 
-  validatePackageMetadata(preflight, parsed);
   const rawProducts = toArray(parsed.products);
   if (!Array.isArray(parsed.products)) addBlocker(preflight, "Package products must be an array.");
 
   preflight.packageCounts = countPackageRecords(rawProducts);
-  for (const [field, expectedValue] of Object.entries(expectedCounts) as Array<
-    [keyof typeof expectedCounts, number]
-  >) {
-    if (preflight.packageCounts[field] !== expectedValue) {
-      addBlocker(
-        preflight,
-        `Package contains ${preflight.packageCounts[field]} ${field}; expected exactly ${expectedValue}.`,
-      );
+  preflight.expectedCounts = { ...preflight.packageCounts };
+  for (const [field, value] of Object.entries(preflight.packageCounts) as Array<[keyof ImportCounts, number]>) {
+    if (value <= 0 || value > maximumRecordsPerKind) {
+      addBlocker(preflight, `Detected ${field} count ${value} must be between 1 and ${maximumRecordsPerKind}.`);
     }
   }
+  validatePackageMetadata(preflight, parsed, preflight.packageCounts);
 
   preflight.candidateProducts = rawProducts
     .map((product, index) => validateCandidateProduct(preflight, product, index))
@@ -594,30 +842,47 @@ async function readAndValidatePackage(preflight: Preflight): Promise<void> {
   preflight.variants = preflight.candidateProducts.flatMap((product) => product.variants);
   preflight.images = preflight.variants.flatMap((variant) => variant.images);
 
-  const duplicateSlugs = uniqueDuplicates(preflight.candidateProducts.map((product) => product.slug));
+  const duplicateNameTypeKeys = uniqueDuplicates(
+    preflight.candidateProducts.map((product) => normalizedProductNameTypeKey(product.name, product.type)),
+  );
+  if (duplicateNameTypeKeys.length > 0) {
+    addBlocker(
+      preflight,
+      `Package contains duplicate normalized name/type candidates: ${duplicateNameTypeKeys.map((key) => key.replace("\u0000", " / ")).join(", ")}.`,
+    );
+  }
+  const duplicateCandidateIds = uniqueDuplicates(
+    rawProducts.flatMap((product) => isRecord(product) && typeof product.candidateId === "string" ? [product.candidateId] : []),
+  );
+  if (duplicateCandidateIds.length > 0) {
+    addBlocker(preflight, `Package contains duplicate candidateIds: ${duplicateCandidateIds.join(", ")}.`);
+  }
+  const duplicateSlugs = uniqueDuplicates(
+    rawProducts.flatMap((product) => isRecord(product) && typeof product.suggestedSlug === "string" ? [product.suggestedSlug] : []),
+  );
   if (duplicateSlugs.length > 0) {
     addBlocker(preflight, `Package contains duplicate candidate slugs: ${duplicateSlugs.join(", ")}.`);
   }
-  const duplicateSourcePaths = uniqueDuplicates(preflight.sourceImages.map((image) => image.sourcePath));
+  const duplicateSourcePaths = uniqueDuplicates(packageImageFieldValues(rawProducts, "sourcePath"));
   if (duplicateSourcePaths.length > 0) {
     addBlocker(preflight, `Package contains duplicate sourcePaths: ${duplicateSourcePaths.join(", ")}.`);
   }
-  const duplicateHashes = uniqueDuplicates(preflight.sourceImages.map((image) => image.sha256));
+  const duplicateHashes = uniqueDuplicates(packageImageFieldValues(rawProducts, "sha256").map((hash) => hash.toLowerCase()));
   if (duplicateHashes.length > 0) {
     addBlocker(preflight, `Package contains duplicate SHA-256 values: ${duplicateHashes.join(", ")}.`);
   }
 
-  if (preflight.candidateProducts.length !== expectedCounts.products) {
+  if (preflight.candidateProducts.length !== preflight.expectedCounts.products) {
     addBlocker(
       preflight,
-      `Validated product candidates total ${preflight.candidateProducts.length}; expected ${expectedCounts.products}.`,
+      `Validated product candidates total ${preflight.candidateProducts.length}; expected ${preflight.expectedCounts.products}.`,
     );
   }
-  if (preflight.variants.length !== expectedCounts.variants) {
-    addBlocker(preflight, `Validated variants total ${preflight.variants.length}; expected ${expectedCounts.variants}.`);
+  if (preflight.variants.length !== preflight.expectedCounts.variants) {
+    addBlocker(preflight, `Validated variants total ${preflight.variants.length}; expected ${preflight.expectedCounts.variants}.`);
   }
-  if (preflight.images.length !== expectedCounts.images) {
-    addBlocker(preflight, `Validated images total ${preflight.images.length}; expected ${expectedCounts.images}.`);
+  if (preflight.images.length !== preflight.expectedCounts.images) {
+    addBlocker(preflight, `Validated images total ${preflight.images.length}; expected ${preflight.expectedCounts.images}.`);
   }
 }
 
@@ -638,16 +903,23 @@ async function mapWithConcurrency<T>(
 }
 
 async function validateSourceFiles(preflight: Preflight): Promise<void> {
+  let resolvedSourceRoot: string;
+  try {
+    const sourceRootStatus = await stat(preflight.cli.sourceRoot);
+    if (!sourceRootStatus.isDirectory()) {
+      addBlocker(preflight, `SOURCE_ROOT is not a directory: ${preflight.cli.sourceRoot}`);
+      return;
+    }
+    resolvedSourceRoot = await realpath(preflight.cli.sourceRoot);
+  } catch (error) {
+    addBlocker(preflight, `Unable to read SOURCE_ROOT: ${sanitizeError(error)}`);
+    return;
+  }
+
   await mapWithConcurrency(preflight.sourceImages, 8, async (image) => {
-    const absoluteSourcePath = resolve(projectRoot, image.sourcePath);
-    const pathWithinSourceRoot = relative(sourceImageRoot, absoluteSourcePath);
-    if (
-      isAbsolute(pathWithinSourceRoot) ||
-      pathWithinSourceRoot === "" ||
-      pathWithinSourceRoot.startsWith("..\\") ||
-      pathWithinSourceRoot.startsWith("../")
-    ) {
-      addBlocker(preflight, `${image.label}.sourcePath is outside public/images/collections.`);
+    const absoluteSourcePath = resolveSourcePath(preflight.cli.sourceRoot, image.sourcePath);
+    if (!absoluteSourcePath) {
+      addBlocker(preflight, `${image.label}.sourcePath escapes --source-root or is not a safe relative path.`);
       return;
     }
 
@@ -658,12 +930,34 @@ async function validateSourceFiles(preflight: Preflight): Promise<void> {
       return;
     }
 
-    const actualHash = createHash("sha256").update(await readFile(absoluteSourcePath)).digest("hex");
+    let canonicalSourcePath: string;
+    try {
+      canonicalSourcePath = await realpath(absoluteSourcePath);
+    } catch {
+      preflight.missingFiles.push(image.sourcePath);
+      return;
+    }
+    if (!pathIsStrictlyWithinRoot(resolvedSourceRoot, canonicalSourcePath)) {
+      addBlocker(preflight, `${image.label}.sourcePath resolves outside --source-root through a link or path escape.`);
+      return;
+    }
+
+    const contents = await readFile(canonicalSourcePath);
+    const actualHash = createHash("sha256").update(contents).digest("hex");
     if (actualHash !== image.sha256) {
       preflight.hashMismatches.push(image.sourcePath);
       return;
     }
     preflight.hashesValid += 1;
+
+    const expectedImageType = supportedImageExtension(image.sourcePath);
+    const actualImageType = detectImageSignature(contents);
+    if (!expectedImageType || expectedImageType !== actualImageType) {
+      preflight.imageSignatureMismatches.push(image.sourcePath);
+      return;
+    }
+    preflight.imageSignaturesValid += 1;
+    preflight.resolvedSourcePaths.set(image.sourcePath, canonicalSourcePath);
   });
 
   if (preflight.missingFiles.length > 0) {
@@ -672,10 +966,19 @@ async function validateSourceFiles(preflight: Preflight): Promise<void> {
   if (preflight.hashMismatches.length > 0) {
     addBlocker(preflight, `${preflight.hashMismatches.length} approved source hashes do not match.`);
   }
-  if (preflight.hashesValid !== expectedCounts.images) {
+  if (preflight.imageSignatureMismatches.length > 0) {
+    addBlocker(preflight, `${preflight.imageSignatureMismatches.length} source files have an unsupported or mismatched image signature.`);
+  }
+  if (preflight.hashesValid !== preflight.expectedCounts.images) {
     addBlocker(
       preflight,
-      `Verified ${preflight.hashesValid}/${expectedCounts.images} source hashes; all hashes must match.`,
+      `Verified ${preflight.hashesValid}/${preflight.expectedCounts.images} source hashes; all hashes must match.`,
+    );
+  }
+  if (preflight.imageSignaturesValid !== preflight.expectedCounts.images) {
+    addBlocker(
+      preflight,
+      `Verified ${preflight.imageSignaturesValid}/${preflight.expectedCounts.images} image signatures; all files must be JPEG, PNG, or WebP with matching extensions.`,
     );
   }
 }
@@ -823,7 +1126,7 @@ async function preflightDatabase(preflight: Preflight): Promise<void> {
 
     const slugs = preflight.candidateProducts.map((product) => product.slug);
     const candidateNameTypes = new Set(
-      preflight.candidateProducts.map((product) => `${normalizedText(product.name)}\u0000${normalizedText(product.type)}`),
+      preflight.candidateProducts.map((product) => normalizedProductNameTypeKey(product.name, product.type)),
     );
     const candidateNames = [...new Set(preflight.candidateProducts.map((product) => normalizedText(product.name)))];
     const [slugResult, nameResult] = await Promise.all([
@@ -832,13 +1135,13 @@ async function preflightDatabase(preflight: Preflight): Promise<void> {
         [slugs],
       ),
       pool.query<ExistingProductRow>(
-        `SELECT id, slug, name, type FROM products WHERE lower(name) = ANY($1::text[])`,
+        `SELECT id, slug, name, type FROM products WHERE lower(btrim(name)) = ANY($1::text[])`,
         [candidateNames],
       ),
     ]);
     preflight.database.existingSlugConflicts = slugResult.rows;
     preflight.database.potentialProductConflicts = nameResult.rows.filter((product) =>
-      candidateNameTypes.has(`${normalizedText(product.name)}\u0000${normalizedText(product.type)}`),
+      candidateNameTypes.has(normalizedProductNameTypeKey(product.name, product.type)),
     );
 
     if (preflight.database.existingSlugConflicts.length > 0) {
@@ -848,9 +1151,9 @@ async function preflightDatabase(preflight: Preflight): Promise<void> {
       );
     }
     if (preflight.database.potentialProductConflicts.length > 0) {
-      addWarning(
+      addBlocker(
         preflight,
-        `Potential PostgreSQL name/type conflicts: ${preflight.database.potentialProductConflicts.map((product) => product.slug).join(", ")}.`,
+        `PostgreSQL already contains normalized name/type matches: ${preflight.database.potentialProductConflicts.map((product) => product.slug).join(", ")}.`,
       );
     }
 
@@ -863,14 +1166,19 @@ function makeUploadPlans(preflight: Preflight): void {
   const uploads: UploadPlan[] = [];
   for (const image of preflight.images) {
     const extension = extname(image.originalFilename);
-    const storageKey = `${preflight.batchPrefix}/${image.productReference.storageSlug}/v${image.productReference.candidateId}/i${image.position}-${image.sha256.slice(0, 16)}${extension}`;
+    const absoluteSourcePath = preflight.resolvedSourcePaths.get(image.sourcePath);
+    if (!absoluteSourcePath) {
+      addBlocker(preflight, `${image.label} has no verified source file for a Storage upload.`);
+      continue;
+    }
+    const storageKey = `${preflight.batchPrefix}/${image.productReference.storageSlug}/c-${image.productReference.candidateId}/v-${image.variantPosition}/i-${image.position}-${image.sha256.slice(0, 16)}${extension}`;
     if (!storagePathIsSafe(storageKey)) {
       addBlocker(preflight, `${image.label} would generate an unsafe Storage key.`);
       continue;
     }
     uploads.push({
       ...image,
-      absoluteSourcePath: resolve(projectRoot, image.sourcePath),
+      absoluteSourcePath,
       storageKey,
     });
   }
@@ -880,10 +1188,10 @@ function makeUploadPlans(preflight: Preflight): void {
   if (duplicateKeys.length > 0) {
     addBlocker(preflight, `Planned Storage keys collide: ${duplicateKeys.join(", ")}.`);
   }
-  if (uploads.length !== expectedCounts.images) {
+  if (uploads.length !== preflight.expectedCounts.images) {
     addBlocker(
       preflight,
-      `Only ${uploads.length}/${expectedCounts.images} Storage destinations can be planned; every image needs one resolved product destination.`,
+      `Only ${uploads.length}/${preflight.expectedCounts.images} Storage destinations can be planned; every image needs one resolved product destination.`,
     );
   }
 }
@@ -963,8 +1271,8 @@ async function preflightStorage(preflight: Preflight): Promise<void> {
   }
 }
 
-async function buildPreflight(mode: ImportMode): Promise<Preflight> {
-  const preflight = makeEmptyPreflight(mode);
+async function buildPreflight(cli: CliOptions): Promise<Preflight> {
+  const preflight = makeEmptyPreflight(cli);
   await readAndValidatePackage(preflight);
   await validateSourceFiles(preflight);
   await preflightDatabase(preflight);
@@ -978,23 +1286,27 @@ function displayList(values: string[]): string {
 }
 
 function printPreflight(preflight: Preflight): void {
-  console.log(`IMPORT_PACKAGE: ${packagePath}`);
+  console.log(`IMPORT_PACKAGE: ${preflight.cli.packagePath}`);
+  console.log(`PACKAGE_SHA256: ${preflight.packageSha256 ?? "unavailable"}`);
+  console.log(`SOURCE_ROOT: ${preflight.cli.sourceRoot}`);
   console.log(`MODE: ${preflight.mode}`);
   console.log(`BATCH_PREFIX: ${preflight.batchPrefix}`);
-  console.log(`PRODUCTS: expected ${expectedCounts.products}; package ${preflight.packageCounts.products}; validated ${preflight.candidateProducts.length}`);
-  console.log(`VARIANTS: expected ${expectedCounts.variants}; package ${preflight.packageCounts.variants}; validated ${preflight.variants.length}`);
-  console.log(`IMAGES: expected ${expectedCounts.images}; package ${preflight.packageCounts.images}; validated ${preflight.images.length}`);
-  console.log(`HASHES_VALID: ${preflight.hashesValid}/${expectedCounts.images}`);
+  console.log(`PRODUCTS: expected ${preflight.expectedCounts.products}; detected ${preflight.packageCounts.products}; validated ${preflight.candidateProducts.length}`);
+  console.log(`VARIANTS: expected ${preflight.expectedCounts.variants}; detected ${preflight.packageCounts.variants}; validated ${preflight.variants.length}`);
+  console.log(`IMAGES: expected ${preflight.expectedCounts.images}; detected ${preflight.packageCounts.images}; validated ${preflight.images.length}`);
+  console.log(`HASHES_VALID: ${preflight.hashesValid}/${preflight.expectedCounts.images}`);
+  console.log(`IMAGE_SIGNATURES_VALID: ${preflight.imageSignaturesValid}/${preflight.expectedCounts.images}`);
   console.log(`FILES_MISSING: ${preflight.missingFiles.length}`);
   console.log(`HASH_MISMATCHES: ${preflight.hashMismatches.length}`);
+  console.log(`IMAGE_SIGNATURE_MISMATCHES: ${preflight.imageSignatureMismatches.length}`);
   console.log(`POSTGRESQL_SLUG_CONFLICTS: ${displayList(preflight.database.existingSlugConflicts.map((product) => product.slug))}`);
-  console.log(`POSTGRESQL_POTENTIAL_CONFLICTS: ${displayList(preflight.database.potentialProductConflicts.map((product) => product.slug))}`);
+  console.log(`POSTGRESQL_PRODUCT_CONFLICTS: ${displayList(preflight.database.potentialProductConflicts.map((product) => product.slug))}`);
   console.log(`POSTGRESQL_SCHEMA_PROBLEMS: ${displayList(preflight.database.schemaProblems)}`);
   console.log(`SUPABASE_SECRET_KEY: ${preflight.storage.secretKeyStatus}`);
   console.log(`PRODUCT_IMAGES_STATUS: ${preflight.storage.productImagesStatus}`);
-  console.log(`STORAGE_ACCESS: ${preflight.storage.status} - ${preflight.storage.detail}`);
-  console.log(`POSTGRESQL_OPERATIONS_PLANNED: INSERT products=${expectedCounts.products}, product_variants=${expectedCounts.variants}, product_images=${expectedCounts.images} in one transaction after all uploads.`);
-  console.log(`STORAGE_UPLOADS_PLANNED: ${preflight.uploads.length}/${expectedCounts.images} to ${preflight.batchPrefix}`);
+  console.log(`STORAGE_STATUS: ${preflight.storage.status} - ${preflight.storage.detail}`);
+  console.log(`POSTGRESQL_OPERATIONS_PLANNED: INSERT products=${preflight.expectedCounts.products}, product_variants=${preflight.expectedCounts.variants}, product_images=${preflight.expectedCounts.images} in one transaction after all uploads.`);
+  console.log(`STORAGE_UPLOADS_PLANNED: ${preflight.uploads.length}/${preflight.expectedCounts.images} to ${preflight.batchPrefix}`);
   console.log(`STORAGE_MECHANISM: server-side administrative client with SUPABASE_SECRET_KEY and product-images bucket; upload uses upsert=false.`);
   if (preflight.warnings.length > 0) {
     console.log("WARNINGS:");
@@ -1008,8 +1320,15 @@ function printPreflight(preflight: Preflight): void {
   }
 }
 
-async function cleanupBatch(client: SupabaseClient, storageKeys: string[]): Promise<string | null> {
+async function cleanupBatch(
+  client: SupabaseClient,
+  batchPrefix: string,
+  storageKeys: string[],
+): Promise<string | null> {
   if (storageKeys.length === 0) return null;
+  if (storageKeys.some((storageKey) => !storageKey.startsWith(`${batchPrefix}/`))) {
+    return "Refusing Storage cleanup because a key is outside the current batch prefix.";
+  }
   const { error } = await client.storage.from(productImagesBucket).remove(storageKeys);
   return error ? sanitizeError(error) : null;
 }
@@ -1023,17 +1342,31 @@ function contentTypeFor(filename: string): string {
       return "image/png";
     case ".webp":
       return "image/webp";
-    case ".gif":
-      return "image/gif";
     default:
       return "application/octet-stream";
   }
 }
 
+async function readAndVerifyUploadContent(upload: UploadPlan): Promise<Blob> {
+  const contents = await readFile(upload.absoluteSourcePath);
+  const actualHash = createHash("sha256").update(contents).digest("hex");
+  if (actualHash !== upload.sha256) {
+    throw new Error(`Source SHA-256 changed after preflight for ${upload.sourcePath}.`);
+  }
+
+  const expectedImageType = supportedImageExtension(upload.originalFilename);
+  const actualImageType = detectImageSignature(contents);
+  if (!expectedImageType || actualImageType !== expectedImageType) {
+    throw new Error(`Source image signature changed or no longer matches ${upload.originalFilename}.`);
+  }
+
+  return new Blob([contents], { type: contentTypeFor(upload.originalFilename) });
+}
+
 async function createDatabaseRecords(preflight: Preflight, uploadedKeys: Map<string, string>): Promise<CreatedRecords> {
   const { db } = await import("../src/db");
   const { products, productVariants, productImages } = await import("../src/db/schema");
-  const { inArray } = await import("drizzle-orm");
+  const { inArray, sql } = await import("drizzle-orm");
   const created: CreatedRecords = { products: [], variants: [], images: [], storageKeys: [...uploadedKeys.values()] };
 
   await db.transaction(async (tx) => {
@@ -1044,6 +1377,23 @@ async function createDatabaseRecords(preflight: Preflight, uploadedKeys: Map<str
       .where(inArray(products.slug, packageSlugs));
     if (conflicts.length > 0) {
       throw new Error(`Concurrent slug conflict: ${conflicts.map((product) => product.slug).join(", ")}`);
+    }
+
+    const candidateNameTypes = new Set(
+      preflight.candidateProducts.map((product) => normalizedProductNameTypeKey(product.name, product.type)),
+    );
+    const candidateNames = [...new Set(preflight.candidateProducts.map((product) => normalizedText(product.name)))];
+    const nameConflicts = await tx
+      .select({ slug: products.slug, name: products.name, type: products.type })
+      .from(products)
+      .where(inArray(sql<string>`lower(btrim(${products.name}))`, candidateNames));
+    const normalizedNameTypeConflicts = nameConflicts.filter((product) =>
+      candidateNameTypes.has(normalizedProductNameTypeKey(product.name, product.type)),
+    );
+    if (normalizedNameTypeConflicts.length > 0) {
+      throw new Error(
+        `Concurrent normalized name/type conflict: ${normalizedNameTypeConflicts.map((product) => product.slug).join(", ")}`,
+      );
     }
 
     const productIdsByCandidateId = new Map<string, number>();
@@ -1117,24 +1467,40 @@ async function writeAuditReport(
   error?: string,
   cleanupError?: string | null,
 ): Promise<string> {
-  await mkdir(auditDirectory, { recursive: true });
-  const reportPath = resolve(auditDirectory, `import-result-${preflight.batchId}.json`);
+  await mkdir(preflight.cli.auditDirectory, { recursive: true });
+  const reportPath = resolve(preflight.cli.auditDirectory, `import-result-${preflight.batchId}.json`);
   await writeFile(
     reportPath,
     `${JSON.stringify(
       {
+        packagePath: preflight.cli.packagePath,
+        packageSha256: preflight.packageSha256,
+        sourceRoot: preflight.cli.sourceRoot,
         batchId: preflight.batchId,
+        batchPrefix: preflight.batchPrefix,
         timestamps: { startedAt, completedAt: new Date().toISOString() },
+        mode: preflight.mode,
         result,
         productIds: created.products,
         variantIds: created.variants,
         imageIds: created.images,
         storageKeys: created.storageKeys,
         counts: {
-          products: created.products.length,
-          variants: created.variants.length,
-          images: created.images.length,
-          storageKeys: created.storageKeys.length,
+          expected: preflight.expectedCounts,
+          detected: preflight.packageCounts,
+          validated: {
+            products: preflight.candidateProducts.length,
+            variants: preflight.variants.length,
+            images: preflight.images.length,
+            hashes: preflight.hashesValid,
+            imageSignatures: preflight.imageSignaturesValid,
+          },
+          created: {
+            products: created.products.length,
+            variants: created.variants.length,
+            images: created.images.length,
+            storageKeys: created.storageKeys.length,
+          },
         },
         blockers: preflight.blockers,
         error,
@@ -1148,39 +1514,58 @@ async function writeAuditReport(
   return reportPath;
 }
 
+async function tryWriteAuditReport(
+  preflight: Preflight,
+  startedAt: string,
+  result: "SUCCESS" | "BLOCKED" | "FAILED",
+  created: CreatedRecords,
+  error?: string,
+  cleanupError?: string | null,
+): Promise<{ reportPath: string | null; auditError: string | null }> {
+  try {
+    return {
+      reportPath: await writeAuditReport(preflight, startedAt, result, created, error, cleanupError),
+      auditError: null,
+    };
+  } catch (auditError) {
+    return { reportPath: null, auditError: sanitizeError(auditError) };
+  }
+}
+
 async function execute(preflight: Preflight): Promise<void> {
   const startedAt = new Date().toISOString();
   const emptyCreated: CreatedRecords = { products: [], variants: [], images: [], storageKeys: [] };
   if (preflight.blockers.length > 0 || !preflight.storage.client) {
-    const reportPath = await writeAuditReport(preflight, startedAt, "BLOCKED", emptyCreated);
+    const audit = await tryWriteAuditReport(preflight, startedAt, "BLOCKED", emptyCreated);
     console.log(`EXECUTE_RESULT: BLOCKED`);
-    console.log(`AUDIT_REPORT: ${reportPath}`);
+    if (audit.reportPath) console.log(`AUDIT_REPORT: ${audit.reportPath}`);
+    if (audit.auditError) console.error(`AUDIT_REPORT_ERROR: ${audit.auditError}`);
+    process.exitCode = 1;
     return;
   }
 
   const uploadedKeys = new Map<string, string>();
-  let cleanupError: string | null = null;
+  let created = emptyCreated;
   try {
     for (const upload of preflight.uploads) {
-      const content = new Blob([await readFile(upload.absoluteSourcePath)], {
-        type: contentTypeFor(upload.originalFilename),
-      });
+      const content = await readAndVerifyUploadContent(upload);
       const { error } = await preflight.storage.client.storage
         .from(productImagesBucket)
         .upload(upload.storageKey, content, { upsert: false, contentType: content.type });
       if (error) throw new Error(`Storage upload failed for ${upload.sourcePath}: ${sanitizeError(error)}`);
       uploadedKeys.set(upload.sourcePath, upload.storageKey);
     }
-    if (uploadedKeys.size !== expectedCounts.images) {
-      throw new Error(`Storage upload count ${uploadedKeys.size} does not equal ${expectedCounts.images}.`);
+    if (uploadedKeys.size !== preflight.expectedCounts.images) {
+      throw new Error(`Storage upload count ${uploadedKeys.size} does not equal ${preflight.expectedCounts.images}.`);
     }
 
-    const created = await createDatabaseRecords(preflight, uploadedKeys);
-    const reportPath = await writeAuditReport(preflight, startedAt, "SUCCESS", created);
-    console.log("EXECUTE_RESULT: SUCCESS");
-    console.log(`AUDIT_REPORT: ${reportPath}`);
+    created = await createDatabaseRecords(preflight, uploadedKeys);
   } catch (error) {
-    cleanupError = await cleanupBatch(preflight.storage.client, [...uploadedKeys.values()]);
+    const cleanupError = await cleanupBatch(
+      preflight.storage.client,
+      preflight.batchPrefix,
+      [...uploadedKeys.values()],
+    );
     const failure = sanitizeError(error);
     const failedCreated: CreatedRecords = {
       products: [],
@@ -1188,7 +1573,7 @@ async function execute(preflight: Preflight): Promise<void> {
       images: [],
       storageKeys: [...uploadedKeys.values()],
     };
-    const reportPath = await writeAuditReport(
+    const audit = await tryWriteAuditReport(
       preflight,
       startedAt,
       "FAILED",
@@ -1198,9 +1583,21 @@ async function execute(preflight: Preflight): Promise<void> {
     );
     console.error(`EXECUTE_RESULT: FAILED - ${failure}`);
     if (cleanupError) console.error(`STORAGE_CLEANUP_ERROR: ${cleanupError}`);
-    console.error(`AUDIT_REPORT: ${reportPath}`);
+    if (audit.reportPath) console.error(`AUDIT_REPORT: ${audit.reportPath}`);
+    if (audit.auditError) console.error(`AUDIT_REPORT_ERROR: ${audit.auditError}`);
     process.exitCode = 1;
+    return;
   }
+
+  const audit = await tryWriteAuditReport(preflight, startedAt, "SUCCESS", created);
+  if (audit.auditError) {
+    console.error(`EXECUTE_RESULT: SUCCESS_WITH_AUDIT_ERROR - ${audit.auditError}`);
+    console.error("Storage objects and PostgreSQL records remain intact because the transaction already committed.");
+    process.exitCode = 1;
+    return;
+  }
+  console.log("EXECUTE_RESULT: SUCCESS");
+  console.log(`AUDIT_REPORT: ${audit.reportPath}`);
 }
 
 async function closeDatabasePool(preflight: Preflight | undefined): Promise<void> {
@@ -1213,18 +1610,22 @@ async function closeDatabasePool(preflight: Preflight | undefined): Promise<void
 }
 
 async function main(): Promise<void> {
-  const mode = parseMode();
+  const cli = parseCli();
   let preflight: Preflight | undefined;
   try {
-    preflight = await buildPreflight(mode);
+    preflight = await buildPreflight(cli);
     printPreflight(preflight);
-    if (mode === "dry-run") {
+    if (cli.mode === "dry-run") {
       console.log(`DRY_RUN_RESULT: ${preflight.blockers.length === 0 ? "PASS" : "BLOCKED"}`);
       console.log("POSTGRESQL_WRITES: 0");
       console.log("STORAGE_UPLOADS: 0");
       console.log("STORAGE_DELETES: 0");
       console.log("PRODUCTOS_CREADOS: 0");
-      if (preflight.blockers.length > 0) process.exitCode = 1;
+      if (preflight.blockers.length > 0) {
+        process.exitCode = 1;
+      } else if (preflight.packageSha256) {
+        console.log(`APPROVAL_TOKEN: ${preflight.packageSha256}`);
+      }
       return;
     }
 
