@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { Pool } from "pg";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
+import { hasCompositeColorName } from "../src/lib/suspicious-variants";
 
 type ImportMode = "dry-run" | "execute";
 type ProductReference = { candidateId: string; storageSlug: string };
@@ -408,6 +409,12 @@ function validateVariant(
   }
 
   const colorName = requiredString(preflight, value.colorName, `${label}.colorName`);
+  if (colorName && hasCompositeColorName(colorName)) {
+    addBlocker(
+      preflight,
+      `${label}.colorName contains multiple independent colors. Import requires one commercial color per variant.`,
+    );
+  }
   const colorHex = nullableString(preflight, value.colorHex, `${label}.colorHex`);
   const colorStatus = normalizeColorStatus(preflight, value.colorStatus, `${label}.colorStatus`);
   const position = requiredNonNegativeInteger(preflight, value.position, `${label}.position`);
