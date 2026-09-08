@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { ProductDetail } from "@/components/product/product-detail";
 import { useEditor } from "@/providers/editor-provider";
 import { Container, buttonVariants } from "@/components/ui";
 import type { Product } from "@/data/catalog";
+import { trackMetaPixelViewContent } from "@/lib/meta-pixel";
 
 /**
  * Resuelve el producto desde el catálogo vivo (base + creados en editor).
@@ -18,6 +20,19 @@ export function ProductPageClient({
   seed?: Product | null;
 }) {
   const { getLiveProduct, productsByDropLive, hydrated } = useEditor();
+  const product = getLiveProduct(slug) ?? seed ?? null;
+  const lastTrackedProductIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!hydrated || !product || lastTrackedProductIdRef.current === product.id) return;
+
+    trackMetaPixelViewContent({
+      productId: product.id,
+      name: product.name,
+      price: product.price,
+    });
+    lastTrackedProductIdRef.current = product.id;
+  }, [hydrated, product]);
 
   if (!hydrated) {
     return (
@@ -26,8 +41,6 @@ export function ProductPageClient({
       </Container>
     );
   }
-
-  const product = getLiveProduct(slug) ?? seed ?? null;
 
   if (!product) {
     return (

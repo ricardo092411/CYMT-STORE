@@ -8,6 +8,7 @@ import { QuantityStepper } from "@/components/product/product-card";
 import { Container, buttonVariants } from "@/components/ui";
 import { site } from "@/data/site";
 import { formatPrice } from "@/lib/utils";
+import { trackMetaPixelInitiateCheckout } from "@/lib/meta-pixel";
 
 export default function CartPage() {
   const { cart, cartSubtotal, setQuantity, removeFromCart, clearCart, hydrated } = useStore();
@@ -113,6 +114,7 @@ export default function CartPage() {
             </div>
             <Link
               href="/checkout"
+              onClick={() => trackMetaPixelInitiateCheckout(cart, cartSubtotal)}
               className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-brand px-6 py-3.5 text-sm font-semibold text-white shadow-[0_14px_40px_-12px_rgba(229,9,20,0.85)] transition hover:bg-brand-bright"
             >
               Finalizar compra <ArrowRight className="h-4 w-4" />

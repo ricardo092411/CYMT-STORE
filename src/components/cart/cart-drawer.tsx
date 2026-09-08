@@ -9,6 +9,7 @@ import { QuantityStepper } from "@/components/product/product-card";
 import { buttonVariants } from "@/components/ui";
 import { formatPrice } from "@/lib/utils";
 import { site } from "@/data/site";
+import { trackMetaPixelInitiateCheckout } from "@/lib/meta-pixel";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -145,7 +146,10 @@ export function CartDrawer() {
                   </div>
                   <Link
                     href="/checkout"
-                    onClick={() => setCartOpen(false)}
+                    onClick={() => {
+                      trackMetaPixelInitiateCheckout(cart, cartSubtotal);
+                      setCartOpen(false);
+                    }}
                     className="flex w-full items-center justify-center gap-2 rounded-full bg-brand px-6 py-3.5 text-sm font-semibold text-white shadow-[0_12px_34px_-12px_rgba(229,9,20,0.8)] transition hover:bg-brand-bright"
                   >
                     Finalizar compra <ArrowRight className="h-4 w-4" />

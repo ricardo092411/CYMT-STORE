@@ -11,6 +11,7 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { FloatingSocial } from "@/components/layout/floating-social";
 import { GlobalChrome } from "@/components/layout/global-chrome";
+import { MetaPixel } from "@/components/analytics/meta-pixel";
 import { site } from "@/data/site";
 import { getLiveDrops } from "@/lib/drops";
 
@@ -86,6 +87,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return (
     <html lang="es" className={`${inter.variable} ${grotesk.variable}`} suppressHydrationWarning>
       <body className="min-h-dvh bg-bg font-sans text-ink antialiased">
+        <MetaPixel />
         <StoreProvider>
           <EditorProvider>
             <DropsProvider initialDrops={drops}>

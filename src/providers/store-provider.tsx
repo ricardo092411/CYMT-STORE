@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { cartKey } from "@/lib/utils";
+import { trackMetaPixelAddToCart } from "@/lib/meta-pixel";
 
 export interface CartItem {
   key: string;
@@ -124,6 +125,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (input: AddToCartInput) => {
       const key = cartKey(input.productId, input.color, input.size);
       const qty = input.quantity ?? 1;
+      trackMetaPixelAddToCart({
+        productId: input.productId,
+        name: input.name,
+        price: input.price,
+        quantity: qty,
+      });
       setCart((prev) => {
         const existing = prev.find((i) => i.key === key);
         if (existing) {
