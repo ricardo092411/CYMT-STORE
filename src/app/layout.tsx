@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Inter, Space_Grotesk } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { StoreProvider } from "@/providers/store-provider";
 import { EditorProvider } from "@/providers/editor-provider";
@@ -97,6 +98,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             </DropsProvider>
           </EditorProvider>
         </StoreProvider>
+        <Script id="metricool-tracker" strategy="afterInteractive">
+          {`function loadScript(a){var b=document.getElementsByTagName("head")[0],c=document.createElement("script");c.type="text/javascript",c.src="https://tracker.metricool.com/resources/be.js",c.onreadystatechange=a,c.onload=a,b.appendChild(c)}loadScript(function(){beTracker.t({hash:"aaa36bdb407004719aba445cf5720e4b"})});`}
+        </Script>
       </body>
     </html>
   );

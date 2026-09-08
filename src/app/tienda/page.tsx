@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { ProductBrowser } from "@/components/product/product-browser";
 import { Container } from "@/components/ui";
-import { getProducts } from "@/lib/products";
 
 export const metadata: Metadata = {
   title: "Tienda",
@@ -12,9 +11,7 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function TiendaPage() {
-  const products = await getProducts();
-
+export default function TiendaPage() {
   return (
     <>
       <Container className="pt-12">
@@ -29,7 +26,7 @@ export default async function TiendaPage() {
         </p>
       </Container>
 
-      <ProductBrowser products={products as any} />
+      <ProductBrowser />
     </>
   );
 }

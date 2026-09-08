@@ -5,7 +5,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import { SlidersHorizontal, Search, X, Plus } from "lucide-react";
 import { ProductCard } from "./product-card";
 import { Container } from "@/components/ui";
-import type { Product } from "@/data/catalog";
 import { useEditor, useLiveProducts } from "@/providers/editor-provider";
 import { useDrops } from "@/providers/drops-provider";
 import type { Drop } from "@/types/drop";
@@ -38,7 +37,6 @@ const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 export function ProductBrowser({
   scopedDrop,
 }: {
-  products?: Product[];
   scopedDrop?: Drop;
 }) {
   const liveProducts = useLiveProducts();
