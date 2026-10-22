@@ -15,6 +15,7 @@ import {
   CYMT_SECTION_CONFIG,
   getAllowedSections,
   getModeFromPathname,
+  getSectionHref,
 } from "@/lib/cymt-modes";
 import { cn } from "@/lib/utils";
 
@@ -58,7 +59,10 @@ export function Header() {
   const pathname = usePathname();
   const mode = getModeFromPathname(pathname);
   const modeNavigation = mode
-    ? getAllowedSections(mode).map((section) => CYMT_SECTION_CONFIG[section])
+    ? getAllowedSections(mode).map((section) => ({
+        ...CYMT_SECTION_CONFIG[section],
+        href: getSectionHref(mode, section),
+      }))
     : null;
 
   function handleLogoChange(files: FileList | null) {
@@ -136,7 +140,7 @@ export function Header() {
           <nav className="hidden items-center gap-8 lg:flex">
             {modeNavigation ? (
               modeNavigation.map((item) => (
-                <Link key={item.path} href={item.path} className={navLinkClass}>
+                <Link key={item.href} href={item.href} className={navLinkClass}>
                   {item.label}
                 </Link>
               ))
@@ -267,8 +271,8 @@ export function Header() {
                   <div className="flex flex-col">
                     {modeNavigation.map((item) => (
                       <Link
-                        key={item.path}
-                        href={item.path}
+                        key={item.href}
+                        href={item.href}
                         className="border-b border-line py-3 font-display text-2xl font-bold text-ink"
                       >
                         {item.label}
