@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Search, Heart, User, ShoppingBag, Menu, X, ChevronDown, Sparkles, Pencil } from "lucide-react";
+import { Search, Heart, User, ShoppingBag, Menu, X, ChevronDown, Sparkles, Pencil, MessageCircle } from "lucide-react";
 import { useStore } from "@/providers/store-provider";
 import { useEditor } from "@/providers/editor-provider";
 import { site } from "@/data/site";
@@ -58,6 +58,7 @@ export function Header() {
   const logoInputRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
   const mode = getModeFromPathname(pathname);
+  const isMachineryMode = mode === "maquinas";
   const modeNavigation = mode
     ? getAllowedSections(mode).map((section) => ({
         ...CYMT_SECTION_CONFIG[section],
@@ -86,17 +87,23 @@ export function Header() {
   }, [pathname, setMenuOpen]);
 
   const navLinkClass =
-    "text-sm font-medium text-ink-soft transition-colors hover:text-ink link-underline";
+    isMachineryMode
+      ? "border-b border-transparent py-1 text-xs font-semibold uppercase tracking-[0.16em] text-ink-soft transition hover:border-brand hover:text-ink"
+      : "text-sm font-medium text-ink-soft transition-colors hover:text-ink link-underline";
 
   return (
     <>
       <header
         className={cn(
           "sticky top-0 z-[55] border-b transition-all duration-300",
-          scrolled ? "glass border-line" : "border-transparent bg-bg/0",
+          isMachineryMode
+            ? "border-line bg-[#0a0b0d]"
+            : scrolled
+              ? "glass border-line"
+              : "border-transparent bg-bg/0",
         )}
       >
-        <div className="container-x flex h-16 items-center justify-between gap-4">
+        <div className={cn("container-x flex items-center justify-between gap-4", isMachineryMode ? "h-[4.5rem]" : "h-16")}>
           {/* Left: mobile menu + logo */}
           <div className="flex items-center gap-2">
             <button
@@ -106,11 +113,20 @@ export function Header() {
             >
               <Menu className="h-5 w-5" />
             </button>
-            <div className="relative flex items-center">
-              <Link href="/" aria-label={site.name} className="flex items-center">
-                <BrandLogo src={logoSrc} priority className="h-7 w-auto md:h-8" />
+            {isMachineryMode ? (
+              <Link href="/maquinas" aria-label="CYMT Maquinaria" className="flex items-center gap-3">
+                <span className="font-display text-lg font-bold tracking-[0.08em] text-ink">CYMT</span>
+                <span className="h-5 w-px bg-line-strong" />
+                <span className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-ink-muted">
+                  Maquinaria
+                </span>
               </Link>
-              {editorEnabled && (
+            ) : (
+              <div className="relative flex items-center">
+                <Link href="/" aria-label={site.name} className="flex items-center">
+                  <BrandLogo src={logoSrc} priority className="h-7 w-auto md:h-8" />
+                </Link>
+                {editorEnabled && (
                 <>
                   <button
                     type="button"
@@ -132,12 +148,13 @@ export function Header() {
                     }}
                   />
                 </>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Center: desktop nav */}
-          <nav className="hidden items-center gap-8 lg:flex">
+          <nav className={cn("hidden items-center lg:flex", isMachineryMode ? "gap-7" : "gap-8")}>
             {modeNavigation ? (
               modeNavigation.map((item) => (
                 <Link key={item.href} href={item.href} className={navLinkClass}>
@@ -183,15 +200,26 @@ export function Header() {
 
           {/* Right: actions */}
           <div className="flex items-center gap-1 sm:gap-2">
-            <button
+            {isMachineryMode ? (
+              <a
+                href={site.whatsapp.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-10 items-center gap-2 border border-brand bg-brand px-4 text-xs font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-brand-bright"
+              >
+                <MessageCircle className="h-4 w-4" /> Cotizar <span className="hidden sm:inline">por WhatsApp</span>
+              </a>
+            ) : (
+              <>
+                <button
               onClick={() => setSearchOpen(true)}
               aria-label="Buscar"
               className="grid h-10 w-10 place-items-center rounded-full text-ink transition hover:bg-surface-2"
             >
               <Search className="h-5 w-5" />
-            </button>
+                </button>
 
-            <Link
+                <Link
               href="/favoritos"
               aria-label="Favoritos"
               className="relative hidden h-10 w-10 place-items-center rounded-full text-ink transition hover:bg-surface-2 sm:grid"
@@ -202,17 +230,17 @@ export function Header() {
                   {favorites.length}
                 </span>
               )}
-            </Link>
+                </Link>
 
-            <Link
+                <Link
               href="/cuenta"
               aria-label="Cuenta"
               className="hidden h-10 w-10 place-items-center rounded-full text-ink transition hover:bg-surface-2 sm:grid"
             >
               <User className="h-5 w-5" />
-            </Link>
+                </Link>
 
-            <button
+                <button
               onClick={() => setCartOpen(true)}
               aria-label="Carrito"
               className="relative grid h-10 w-10 place-items-center rounded-full text-ink transition hover:bg-surface-2"
@@ -223,15 +251,17 @@ export function Header() {
                   {cartCount}
                 </span>
               )}
-            </button>
+                </button>
 
-            <button
+                <button
               onClick={() => setClubOpen(true)}
               className="ml-1 hidden items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-xs font-semibold text-white shadow-[0_10px_28px_-12px_rgba(229,9,20,0.8)] transition hover:bg-brand-bright md:inline-flex"
             >
               <Sparkles className="h-3.5 w-3.5" />
               Únete al Club
-            </button>
+                </button>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -253,10 +283,17 @@ export function Header() {
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ duration: 0.4, ease: EASE }}
-              className="absolute left-0 top-0 flex h-full w-[86%] max-w-sm flex-col bg-bg-soft"
+              className={cn(
+                "absolute left-0 top-0 flex h-full w-[86%] max-w-sm flex-col",
+                isMachineryMode ? "border-r border-line bg-[#0a0b0d]" : "bg-bg-soft",
+              )}
             >
               <div className="flex items-center justify-between border-b border-line px-5 py-4">
-                <BrandLogo src={logoSrc} className="h-7 w-auto" />
+                {isMachineryMode ? (
+                  <span className="font-display text-sm font-bold uppercase tracking-[0.16em] text-ink">CYMT | Maquinaria</span>
+                ) : (
+                  <BrandLogo src={logoSrc} className="h-7 w-auto" />
+                )}
                 <button
                   onClick={() => setMenuOpen(false)}
                   aria-label="Cerrar menú"
@@ -311,13 +348,24 @@ export function Header() {
               </div>
 
               <div className="border-t border-line px-5 py-5">
-                <button
+                {isMachineryMode ? (
+                  <a
+                    href={site.whatsapp.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex w-full items-center justify-center gap-2 border border-brand bg-brand px-6 py-3.5 text-xs font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-brand-bright"
+                  >
+                    <MessageCircle className="h-4 w-4" /> Cotizar por WhatsApp
+                  </a>
+                ) : (
+                  <>
+                    <button
                   onClick={() => setClubOpen(true)}
                   className="mb-4 flex w-full items-center justify-center gap-2 rounded-full bg-brand px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-brand-bright"
                 >
                   <Sparkles className="h-4 w-4" /> Únete al Club CYMT
-                </button>
-                <div className="flex items-center justify-center gap-3">
+                    </button>
+                    <div className="flex items-center justify-center gap-3">
                   {socialItems.map(({ key, label, href, Icon }) => (
                     <a
                       key={key}
@@ -330,7 +378,9 @@ export function Header() {
                       <Icon className="h-5 w-5" />
                     </a>
                   ))}
-                </div>
+                    </div>
+                  </>
+                )}
               </div>
             </motion.aside>
           </div>
