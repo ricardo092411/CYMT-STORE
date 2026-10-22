@@ -1,5 +1,5 @@
-import { ModeSectionPage } from "@/components/navigation/mode-section-page";
+import { CmtInkLanding } from "@/components/inks/cmt-ink-landing";
 
 export default function CamisasTintasPage() {
-  return <ModeSectionPage section="tintas" mode="camisas" />;
+  return <CmtInkLanding />;
 }
