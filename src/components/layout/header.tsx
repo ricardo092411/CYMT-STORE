@@ -11,6 +11,11 @@ import { useEditor } from "@/providers/editor-provider";
 import { site } from "@/data/site";
 import { useDrops } from "@/providers/drops-provider";
 import { socialItems } from "@/components/icons/social-icons";
+import {
+  CYMT_SECTION_CONFIG,
+  getAllowedSections,
+  getModeFromPathname,
+} from "@/lib/cymt-modes";
 import { cn } from "@/lib/utils";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
@@ -51,6 +56,10 @@ export function Header() {
   const [scrolled, setScrolled] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
+  const mode = getModeFromPathname(pathname);
+  const modeNavigation = mode
+    ? getAllowedSections(mode).map((section) => CYMT_SECTION_CONFIG[section])
+    : null;
 
   function handleLogoChange(files: FileList | null) {
     const file = files?.[0];
@@ -125,37 +134,47 @@ export function Header() {
 
           {/* Center: desktop nav */}
           <nav className="hidden items-center gap-8 lg:flex">
-            <Link href="/tienda" className={navLinkClass}>
-              Tienda
-            </Link>
+            {modeNavigation ? (
+              modeNavigation.map((item) => (
+                <Link key={item.path} href={item.path} className={navLinkClass}>
+                  {item.label}
+                </Link>
+              ))
+            ) : (
+              <>
+                <Link href="/tienda" className={navLinkClass}>
+                  Tienda
+                </Link>
 
-            {/* Drops dropdown */}
-            <div className="group/drops relative">
-              <button className={cn(navLinkClass, "inline-flex items-center gap-1")}>
-                Drops
-                <ChevronDown className="h-3.5 w-3.5 transition-transform group-hover/drops:rotate-180" />
-              </button>
-              <div className="invisible absolute left-1/2 top-full z-50 w-64 -translate-x-1/2 translate-y-2 pt-3 opacity-0 transition-all duration-300 group-hover/drops:visible group-hover/drops:translate-y-0 group-hover/drops:opacity-100">
-                <div className="overflow-hidden rounded-2xl border border-line bg-surface p-2 shadow-2xl">
-                  {liveDrops.map((d) => (
-                    <Link
-                      key={d.slug}
-                      href={`/drop/${d.slug}`}
-                      className="flex items-center justify-between rounded-xl px-3 py-2.5 transition hover:bg-surface-2"
-                    >
-                      <span className="text-sm font-medium text-ink">{d.name}</span>
-                      <span className="text-[0.65rem] uppercase tracking-wider text-ink-faint">
-                        {d.title}
-                      </span>
-                    </Link>
-                  ))}
+                {/* Drops dropdown */}
+                <div className="group/drops relative">
+                  <button className={cn(navLinkClass, "inline-flex items-center gap-1")}>
+                    Drops
+                    <ChevronDown className="h-3.5 w-3.5 transition-transform group-hover/drops:rotate-180" />
+                  </button>
+                  <div className="invisible absolute left-1/2 top-full z-50 w-64 -translate-x-1/2 translate-y-2 pt-3 opacity-0 transition-all duration-300 group-hover/drops:visible group-hover/drops:translate-y-0 group-hover/drops:opacity-100">
+                    <div className="overflow-hidden rounded-2xl border border-line bg-surface p-2 shadow-2xl">
+                      {liveDrops.map((d) => (
+                        <Link
+                          key={d.slug}
+                          href={`/drop/${d.slug}`}
+                          className="flex items-center justify-between rounded-xl px-3 py-2.5 transition hover:bg-surface-2"
+                        >
+                          <span className="text-sm font-medium text-ink">{d.name}</span>
+                          <span className="text-[0.65rem] uppercase tracking-wider text-ink-faint">
+                            {d.title}
+                          </span>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            <Link href="/favoritos" className={navLinkClass}>
-              Producción De Alta Calidad
-            </Link>
+                <Link href="/favoritos" className={navLinkClass}>
+                  Producción De Alta Calidad
+                </Link>
+              </>
+            )}
           </nav>
 
           {/* Right: actions */}
@@ -244,31 +263,47 @@ export function Header() {
               </div>
 
               <div className="flex-1 overflow-y-auto px-5 py-6">
-                <Link href="/tienda" className="block py-3 font-display text-2xl font-bold text-ink">
-                  Tienda
-                </Link>
-                <p className="mt-4 mb-1 text-xs uppercase tracking-[0.2em] text-ink-faint">Drops</p>
-                <div className="flex flex-col">
-                  {liveDrops.map((d) => (
-                    <Link
-                      key={d.slug}
-                      href={`/drop/${d.slug}`}
-                      className="flex items-center justify-between border-b border-line py-3"
-                    >
-                      <span className="font-medium text-ink">{d.name}</span>
-                      <span className="text-[0.65rem] uppercase tracking-wider text-ink-faint">
-                        {d.title}
-                      </span>
+                {modeNavigation ? (
+                  <div className="flex flex-col">
+                    {modeNavigation.map((item) => (
+                      <Link
+                        key={item.path}
+                        href={item.path}
+                        className="border-b border-line py-3 font-display text-2xl font-bold text-ink"
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <>
+                    <Link href="/tienda" className="block py-3 font-display text-2xl font-bold text-ink">
+                      Tienda
                     </Link>
-                  ))}
-                </div>
+                    <p className="mt-4 mb-1 text-xs uppercase tracking-[0.2em] text-ink-faint">Drops</p>
+                    <div className="flex flex-col">
+                      {liveDrops.map((d) => (
+                        <Link
+                          key={d.slug}
+                          href={`/drop/${d.slug}`}
+                          className="flex items-center justify-between border-b border-line py-3"
+                        >
+                          <span className="font-medium text-ink">{d.name}</span>
+                          <span className="text-[0.65rem] uppercase tracking-wider text-ink-faint">
+                            {d.title}
+                          </span>
+                        </Link>
+                      ))}
+                    </div>
 
-                <Link href="/favoritos" className="mt-4 block py-3 font-display text-xl font-bold text-ink">
-                  Favoritos
-                </Link>
-                <Link href="/cuenta" className="block py-3 font-display text-xl font-bold text-ink">
-                  Mi cuenta
-                </Link>
+                    <Link href="/favoritos" className="mt-4 block py-3 font-display text-xl font-bold text-ink">
+                      Favoritos
+                    </Link>
+                    <Link href="/cuenta" className="block py-3 font-display text-xl font-bold text-ink">
+                      Mi cuenta
+                    </Link>
+                  </>
+                )}
               </div>
 
               <div className="border-t border-line px-5 py-5">
