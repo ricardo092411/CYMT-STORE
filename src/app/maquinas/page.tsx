@@ -1,5 +1,5 @@
-import { ModeSectionPage } from "@/components/navigation/mode-section-page";
+import { MachineryLanding } from "@/components/machinery/machinery-landing";
 
 export default function MaquinasPage() {
-  return <ModeSectionPage section="maquinas" mode="maquinas" />;
+  return <MachineryLanding />;
 }
