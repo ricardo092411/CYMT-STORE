@@ -1,5 +1,5 @@
-import { ModeSectionPage } from "@/components/navigation/mode-section-page";
+import { ConfectionLanding } from "@/components/confection/confection-landing";
 
 export default function ConfeccionPage() {
-  return <ModeSectionPage section="confeccion" mode="confeccion" />;
+  return <ConfectionLanding />;
 }
