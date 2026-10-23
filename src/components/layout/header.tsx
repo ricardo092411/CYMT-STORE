@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Search, Heart, User, ShoppingBag, Menu, X, ChevronDown, Sparkles, Pencil, MessageCircle } from "lucide-react";
+import { Search, Heart, User, ShoppingBag, Menu, X, ChevronDown, Sparkles, Pencil, MessageCircle, FolderDown } from "lucide-react";
 import { useStore } from "@/providers/store-provider";
 import { useEditor } from "@/providers/editor-provider";
 import { site } from "@/data/site";
@@ -59,12 +59,20 @@ export function Header() {
   const pathname = usePathname();
   const mode = getModeFromPathname(pathname);
   const isMachineryMode = mode === "maquinas";
-  const modeNavigation = mode
-    ? getAllowedSections(mode).map((section) => ({
-        ...CYMT_SECTION_CONFIG[section],
-        href: getSectionHref(mode, section),
-      }))
-    : null;
+  const isDownloadsMode = mode === "descargas";
+  const isSpecialMode = isMachineryMode || isDownloadsMode;
+  const modeNavigation = isDownloadsMode
+    ? [
+        { label: "Descargas", href: "/descargas" },
+        { label: "Categorías", href: "/descargas#categorias" },
+        { label: "Cómo funciona", href: "/descargas#como-funciona" },
+      ]
+    : mode
+      ? getAllowedSections(mode).map((section) => ({
+          ...CYMT_SECTION_CONFIG[section],
+          href: getSectionHref(mode, section),
+        }))
+      : null;
 
   function handleLogoChange(files: FileList | null) {
     const file = files?.[0];
@@ -89,6 +97,8 @@ export function Header() {
   const navLinkClass =
     isMachineryMode
       ? "border-b border-transparent py-1 text-xs font-semibold uppercase tracking-[0.16em] text-ink-soft transition hover:border-brand hover:text-ink"
+      : isDownloadsMode
+        ? "text-xs font-semibold uppercase tracking-[0.14em] text-ink-soft transition hover:text-ink"
       : "text-sm font-medium text-ink-soft transition-colors hover:text-ink link-underline";
 
   return (
@@ -98,12 +108,14 @@ export function Header() {
           "sticky top-0 z-[55] border-b transition-all duration-300",
           isMachineryMode
             ? "border-line bg-[#0a0b0d]"
+            : isDownloadsMode
+              ? "border-line bg-[#0c0d12]"
             : scrolled
               ? "glass border-line"
               : "border-transparent bg-bg/0",
         )}
       >
-        <div className={cn("container-x flex items-center justify-between gap-4", isMachineryMode ? "h-[4.5rem]" : "h-16")}>
+        <div className={cn("container-x flex items-center justify-between gap-4", isSpecialMode ? "h-[4.5rem]" : "h-16")}>
           {/* Left: mobile menu + logo */}
           <div className="flex items-center gap-2">
             <button
@@ -119,6 +131,14 @@ export function Header() {
                 <span className="h-5 w-px bg-line-strong" />
                 <span className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-ink-muted">
                   Maquinaria
+                </span>
+              </Link>
+            ) : isDownloadsMode ? (
+              <Link href="/descargas" aria-label="CYMT Descargas" className="flex items-center gap-3">
+                <span className="font-display text-lg font-bold tracking-[0.08em] text-ink">CYMT</span>
+                <span className="h-5 w-px bg-line-strong" />
+                <span className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-ink-muted">
+                  Descargas
                 </span>
               </Link>
             ) : (
@@ -154,7 +174,7 @@ export function Header() {
           </div>
 
           {/* Center: desktop nav */}
-          <nav className={cn("hidden items-center lg:flex", isMachineryMode ? "gap-7" : "gap-8")}>
+          <nav className={cn("hidden items-center lg:flex", isSpecialMode ? "gap-7" : "gap-8")}>
             {modeNavigation ? (
               modeNavigation.map((item) => (
                 <Link key={item.href} href={item.href} className={navLinkClass}>
@@ -209,6 +229,13 @@ export function Header() {
               >
                 <MessageCircle className="h-4 w-4" /> Cotizar <span className="hidden sm:inline">por WhatsApp</span>
               </a>
+            ) : isDownloadsMode ? (
+              <Link
+                href="/descargas#recursos"
+                className="inline-flex h-10 items-center gap-2 border border-brand bg-brand px-4 text-xs font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-brand-bright"
+              >
+                <FolderDown className="h-4 w-4" /> Explorar recursos
+              </Link>
             ) : (
               <>
                 <button
@@ -285,12 +312,14 @@ export function Header() {
               transition={{ duration: 0.4, ease: EASE }}
               className={cn(
                 "absolute left-0 top-0 flex h-full w-[86%] max-w-sm flex-col",
-                isMachineryMode ? "border-r border-line bg-[#0a0b0d]" : "bg-bg-soft",
+                isMachineryMode ? "border-r border-line bg-[#0a0b0d]" : isDownloadsMode ? "border-r border-line bg-[#0c0d12]" : "bg-bg-soft",
               )}
             >
               <div className="flex items-center justify-between border-b border-line px-5 py-4">
                 {isMachineryMode ? (
                   <span className="font-display text-sm font-bold uppercase tracking-[0.16em] text-ink">CYMT | Maquinaria</span>
+                ) : isDownloadsMode ? (
+                  <span className="font-display text-sm font-bold uppercase tracking-[0.16em] text-ink">CYMT | Descargas</span>
                 ) : (
                   <BrandLogo src={logoSrc} className="h-7 w-auto" />
                 )}
@@ -357,6 +386,13 @@ export function Header() {
                   >
                     <MessageCircle className="h-4 w-4" /> Cotizar por WhatsApp
                   </a>
+                ) : isDownloadsMode ? (
+                  <Link
+                    href="/descargas#recursos"
+                    className="flex w-full items-center justify-center gap-2 border border-brand bg-brand px-6 py-3.5 text-xs font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-brand-bright"
+                  >
+                    <FolderDown className="h-4 w-4" /> Explorar recursos
+                  </Link>
                 ) : (
                   <>
                     <button

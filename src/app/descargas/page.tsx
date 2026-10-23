@@ -1,5 +1,5 @@
-import { ModeSectionPage } from "@/components/navigation/mode-section-page";
+import { DownloadsLanding } from "@/components/downloads/downloads-landing";
 
 export default function DescargasPage() {
-  return <ModeSectionPage section="descargas" mode="descargas" />;
+  return <DownloadsLanding />;
 }
