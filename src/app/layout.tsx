@@ -6,11 +6,7 @@ import "./globals.css";
 import { StoreProvider } from "@/providers/store-provider";
 import { EditorProvider } from "@/providers/editor-provider";
 import { DropsProvider } from "@/providers/drops-provider";
-import { AnnouncementBar } from "@/components/layout/announcement-bar";
-import { Header } from "@/components/layout/header";
-import { Footer } from "@/components/layout/footer";
-import { FloatingSocial } from "@/components/layout/floating-social";
-import { GlobalChrome } from "@/components/layout/global-chrome";
+import { AppShell } from "@/components/layout/app-shell";
 import { MetaPixel } from "@/components/analytics/meta-pixel";
 import { site } from "@/data/site";
 import { getLiveDrops } from "@/lib/drops";
@@ -91,12 +87,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <StoreProvider>
           <EditorProvider>
             <DropsProvider initialDrops={drops}>
-              <AnnouncementBar />
-              <Header />
-              <main>{children}</main>
-              <Footer />
-              <FloatingSocial />
-              <GlobalChrome />
+              <AppShell>{children}</AppShell>
             </DropsProvider>
           </EditorProvider>
         </StoreProvider>
