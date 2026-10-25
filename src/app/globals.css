@@ -166,6 +166,75 @@
   .link-underline:hover {
     background-size: 100% 1px;
   }
+
+  /* Isolated control set used by the real Maquinaria admin workspace. */
+  .admin-input {
+    width: 100%;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.22);
+    padding: 0.625rem 0.75rem;
+    color: #f4f4f5;
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 160ms ease, background-color 160ms ease;
+  }
+  .admin-input::placeholder {
+    color: #71717a;
+  }
+  .admin-input:focus {
+    border-color: var(--color-brand);
+    background: rgba(255, 255, 255, 0.035);
+  }
+  .admin-button-primary,
+  .admin-button-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.625rem;
+    padding: 0.625rem 0.875rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+  }
+  .admin-button-primary {
+    border: 1px solid var(--color-brand);
+    background: var(--color-brand);
+    color: white;
+  }
+  .admin-button-primary:hover:not(:disabled) {
+    background: var(--color-brand-bright);
+  }
+  .admin-button-secondary {
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: #e4e4e7;
+  }
+  .admin-button-secondary:hover:not(:disabled) {
+    border-color: rgba(255, 255, 255, 0.34);
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .admin-button-primary:disabled,
+  .admin-button-secondary:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+  .image-action {
+    display: grid;
+    width: 1.75rem;
+    height: 1.75rem;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #a1a1aa;
+    transition: border-color 160ms ease, color 160ms ease;
+  }
+  .image-action:hover:not(:disabled) {
+    border-color: rgba(255, 255, 255, 0.3);
+    color: white;
+  }
+  .image-action:disabled {
+    cursor: not-allowed;
+    opacity: 0.35;
+  }
 }
 
 @layer utilities {

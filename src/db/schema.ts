@@ -20,6 +20,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  index,
   integer,
   jsonb,
   numeric,
@@ -138,6 +139,70 @@ export const productImages = pgTable(
     uniqueIndex("product_images_cover_per_variant_unique")
       .on(table.productVariantId)
       .where(sql`${table.isCover} = true`),
+  ],
+);
+
+/* -------------------------- Machinery CMS ------------------------- */
+
+/** Flexible technical data for a machine, kept intentionally independent of its category. */
+export type MachinerySpecification = {
+  label: string;
+  value: string;
+};
+
+export const machineryCategories = pgTable("machinery_categories", {
+  id: serial("id").primaryKey(),
+  slug: varchar("slug", { length: 160 }).notNull().unique(),
+  name: varchar("name", { length: 160 }).notNull(),
+  description: text("description"),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  isPublished: boolean("is_published").default(false).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const machineryProducts = pgTable(
+  "machinery_products",
+  {
+    id: serial("id").primaryKey(),
+    categoryId: integer("category_id")
+      .notNull()
+      .references(() => machineryCategories.id, { onDelete: "restrict" }),
+    slug: varchar("slug", { length: 160 }).notNull().unique(),
+    name: varchar("name", { length: 200 }).notNull(),
+    shortDescription: varchar("short_description", { length: 500 }).notNull(),
+    description: text("description"),
+    specifications: jsonb("specifications").$type<MachinerySpecification[]>(),
+    priceNote: varchar("price_note", { length: 160 }),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    isPublished: boolean("is_published").default(false).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("machinery_products_category_id_idx").on(table.categoryId)],
+);
+
+export const machineryProductImages = pgTable(
+  "machinery_product_images",
+  {
+    id: serial("id").primaryKey(),
+    productId: integer("product_id")
+      .notNull()
+      .references(() => machineryProducts.id, { onDelete: "cascade" }),
+    storagePath: text("storage_path").notNull(),
+    altText: varchar("alt_text", { length: 300 }),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    isPrimary: boolean("is_primary").default(false).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("machinery_product_images_product_sort_order_unique").on(
+      table.productId,
+      table.sortOrder,
+    ),
+    uniqueIndex("machinery_product_images_primary_per_product_unique")
+      .on(table.productId)
+      .where(sql`${table.isPrimary} = true`),
   ],
 );
 

@@ -8,305 +8,54 @@ import {
   MessageCircle,
   Ruler,
   Settings2,
-  ShieldCheck,
   Truck,
   Wrench,
 } from "lucide-react";
 import { Container, SectionHeader, buttonVariants } from "@/components/ui";
 import { site } from "@/data/site";
+import type { PublicMachineryCatalog, PublicMachineryProduct } from "@/lib/public-machinery";
 import { cn } from "@/lib/utils";
 
-const machineCategories = [
-  {
-    title: "Pulpos serigráficos",
-    description: "Precisión, estabilidad y rendimiento para producción de uno o varios colores.",
-  },
-  {
-    title: "Reveladoras UV",
-    description: "Exposición práctica y consistente para el revelado de marcos.",
-  },
-  {
-    title: "Presecadores / Flash",
-    description: "Secado rápido para procesos multicolor y bases.",
-  },
-  {
-    title: "Hornos de curado",
-    description: "Soluciones para curado uniforme y producción continua.",
-  },
-  {
-    title: "Mesas y accesorios",
-    description: "Equipos complementarios para mejorar el flujo del taller.",
-  },
-] as const;
-
 const benefits: { icon: LucideIcon; title: string; description: string }[] = [
-  {
-    icon: Factory,
-    title: "Fabricación local",
-    description: "Equipos pensados y fabricados cerca de tu operación.",
-  },
-  {
-    icon: Headphones,
-    title: "Soporte directo",
-    description: "Hablás con el equipo que conoce cada configuración.",
-  },
-  {
-    icon: Ruler,
-    title: "Diseño funcional",
-    description: "Soluciones claras para un flujo de trabajo más ordenado.",
-  },
-  {
-    icon: Settings2,
-    title: "Producción continua",
-    description: "Estructuras robustas para acompañar el ritmo del taller.",
-  },
-  {
-    icon: Wrench,
-    title: "Acompañamiento técnico",
-    description: "Te orientamos para elegir la configuración adecuada.",
-  },
+  { icon: Factory, title: "Fabricación local", description: "Equipos pensados y fabricados cerca de tu operación." },
+  { icon: Headphones, title: "Soporte directo", description: "Hablás con el equipo que conoce cada configuración." },
+  { icon: Ruler, title: "Diseño funcional", description: "Soluciones claras para un flujo de trabajo más ordenado." },
+  { icon: Settings2, title: "Producción continua", description: "Estructuras robustas para acompañar el ritmo del taller." },
+  { icon: Wrench, title: "Acompañamiento técnico", description: "Te orientamos para elegir la configuración adecuada." },
 ];
 
-function MediaPlaceholder({
-  label,
-  className,
-  technical = false,
-}: {
-  label: string;
-  className?: string;
-  technical?: boolean;
-}) {
-  return (
-    <div
-      aria-label={label}
-      className={cn(
-        "relative overflow-hidden border border-line-strong bg-[#121316]",
-        "before:absolute before:inset-0 before:bg-[linear-gradient(115deg,transparent_0%,rgba(255,255,255,0.05)_45%,transparent_75%)]",
-        className,
-      )}
-    >
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.055)_1px,transparent_1px)] bg-[size:2rem_2rem] opacity-50" />
-      <div className="absolute -right-8 top-1/2 h-28 w-[130%] -translate-y-1/2 rotate-[-12deg] border-y border-white/10 bg-black/10" />
-      <div className="absolute bottom-0 left-0 h-px w-full bg-brand/80" />
-      {technical && (
-        <>
-          <span className="absolute left-4 top-4 border border-line-strong bg-bg/80 px-2 py-1 text-[0.55rem] font-semibold uppercase tracking-[0.16em] text-ink-muted">
-            Product visual / machine preview
-          </span>
-          <span className="absolute right-4 top-4 text-[0.55rem] font-semibold tracking-[0.16em] text-ink-faint">CYMT-01</span>
-          <span className="absolute bottom-4 right-4 text-[0.55rem] font-semibold uppercase tracking-[0.14em] text-ink-faint">Referencia visual</span>
-        </>
-      )}
-      <span className="absolute bottom-4 left-4 text-[0.6rem] font-semibold uppercase tracking-[0.2em] text-ink-muted">
-        {label}
-      </span>
-    </div>
-  );
+function MediaPlaceholder({ label, className, technical = false }: { label: string; className?: string; technical?: boolean }) {
+  return <div aria-label={label} className={cn("relative overflow-hidden border border-line-strong bg-[#121316]", "before:absolute before:inset-0 before:bg-[linear-gradient(115deg,transparent_0%,rgba(255,255,255,0.05)_45%,transparent_75%)]", className)}><div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.055)_1px,transparent_1px)] bg-[size:2rem_2rem] opacity-50" /><div className="absolute -right-8 top-1/2 h-28 w-[130%] -translate-y-1/2 rotate-[-12deg] border-y border-white/10 bg-black/10" /><div className="absolute bottom-0 left-0 h-px w-full bg-brand/80" />{technical && <><span className="absolute left-4 top-4 border border-line-strong bg-bg/80 px-2 py-1 text-[0.55rem] font-semibold uppercase tracking-[0.16em] text-ink-muted">Product visual / machine preview</span><span className="absolute right-4 top-4 text-[0.55rem] font-semibold tracking-[0.16em] text-ink-faint">CYMT-01</span><span className="absolute bottom-4 right-4 text-[0.55rem] font-semibold uppercase tracking-[0.14em] text-ink-faint">Referencia visual</span></>}<span className="absolute bottom-4 left-4 text-[0.6rem] font-semibold uppercase tracking-[0.2em] text-ink-muted">{label}</span></div>;
+}
+
+function ProductVisual({ product, className }: { product: Pick<PublicMachineryProduct, "name" | "primaryImageUrl">; className?: string }) {
+  return product.primaryImageUrl ? <img src={product.primaryImageUrl} alt={product.name} className={cn("w-full object-cover", className)} /> : <MediaPlaceholder label={`Imagen pendiente: ${product.name}`} className={className} />;
 }
 
 function Hero() {
-  return (
-    <section className="relative overflow-hidden border-b border-line bg-bg-soft">
-      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:4rem_4rem]" />
-      <Container className="relative grid min-h-[calc(100vh-4.5rem)] items-center gap-12 py-20 lg:grid-cols-[1.05fr_0.95fr] lg:py-24">
-        <div className="max-w-2xl">
-          <span className="inline-flex items-center gap-3 border-y border-line-strong py-2 text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-ink-soft">
-            <span className="text-brand">CYMT Industrial</span>
-            <span className="h-3 w-px bg-line-strong" /> Fabricación local
-          </span>
-          <p className="mt-9 text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-ink-faint">Catálogo / 01</p>
-          <h1 className="mt-3 text-balance text-5xl font-bold uppercase leading-[0.92] sm:text-6xl lg:text-7xl">
-            Maquinaria <span className="text-brand">Serigráfica</span>
-          </h1>
-          <p className="mt-6 max-w-xl font-display text-2xl font-semibold text-ink-soft md:text-3xl">
-            Fabricada para producción real.
-          </p>
-          <p className="mt-3 max-w-xl leading-relaxed text-ink-muted md:text-lg">
-            Equipos robustos, funcionales y diseñados para acompañar el ritmo de tu taller.
-          </p>
-          <div className="mt-9 flex flex-wrap gap-3">
-            <a href="#maquinas" className={buttonVariants({ size: "lg" })}>
-              Ver máquinas <ArrowRight className="h-4 w-4" />
-            </a>
-            <a
-              href={site.whatsapp.link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={buttonVariants({ variant: "outline", size: "lg" })}
-            >
-              <MessageCircle className="h-4 w-4 text-brand" /> Cotizar por WhatsApp
-            </a>
-          </div>
-          <div className="mt-12 grid grid-cols-2 border-y border-line-strong sm:grid-cols-4">
-            {[
-              [Factory, "Fabricación local"],
-              [Settings2, "Producción real"],
-              [Truck, "Envíos en El Salvador"],
-              [Headphones, "Soporte directo"],
-            ].map(([Icon, label], index) => {
-              const BenefitIcon = Icon as LucideIcon;
-              return (
-                <div key={label as string} className="border-line px-3 py-4 first:pl-0 sm:border-l sm:first:border-l-0">
-                  <span className="text-[0.58rem] font-semibold tracking-[0.16em] text-ink-faint">0{index + 1}</span>
-                  <div className="mt-2 flex gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-ink-soft">
-                    <BenefitIcon className="h-4 w-4 shrink-0 text-brand" />
-                    <span>{label as string}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="relative mx-auto w-full max-w-xl lg:max-w-none">
-          <MediaPlaceholder
-            label="Imagen principal de maquinaria"
-            technical
-            className="aspect-[5/4] shadow-[0_30px_90px_-40px_rgba(0,0,0,0.9)]"
-          />
-          <div className="absolute -bottom-4 -left-3 grid border border-line-strong bg-surface shadow-xl sm:-left-5 sm:grid-cols-3">
-            {[
-              ["Serie CYMT", "Fabricación local"],
-              ["Aplicación", "Producción continua"],
-              ["Estado", "Visual pendiente"],
-            ].map(([label, value]) => (
-              <div key={label} className="border-line px-4 py-3 sm:border-r sm:last:border-r-0">
-                <p className="text-[0.55rem] font-semibold uppercase tracking-[0.16em] text-ink-faint">{label}</p>
-                <p className="mt-1 text-xs font-semibold uppercase tracking-[0.08em] text-ink">{value}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Container>
-    </section>
-  );
+  return <section className="relative overflow-hidden border-b border-line bg-bg-soft"><div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:4rem_4rem]" /><Container className="relative grid min-h-[calc(100vh-4.5rem)] items-center gap-12 py-20 lg:grid-cols-[1.05fr_0.95fr] lg:py-24"><div className="max-w-2xl"><span className="inline-flex items-center gap-3 border-y border-line-strong py-2 text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-ink-soft"><span className="text-brand">CYMT Industrial</span><span className="h-3 w-px bg-line-strong" /> Fabricación local</span><p className="mt-9 text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-ink-faint">Catálogo / 01</p><h1 className="mt-3 text-balance text-5xl font-bold uppercase leading-[0.92] sm:text-6xl lg:text-7xl">Maquinaria <span className="text-brand">Serigráfica</span></h1><p className="mt-6 max-w-xl font-display text-2xl font-semibold text-ink-soft md:text-3xl">Fabricada para producción real.</p><p className="mt-3 max-w-xl leading-relaxed text-ink-muted md:text-lg">Equipos robustos, funcionales y diseñados para acompañar el ritmo de tu taller.</p><div className="mt-9 flex flex-wrap gap-3"><a href="#maquinas" className={buttonVariants({ size: "lg" })}>Ver máquinas <ArrowRight className="h-4 w-4" /></a><a href={site.whatsapp.link} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "outline", size: "lg" })}><MessageCircle className="h-4 w-4 text-brand" /> Cotizar por WhatsApp</a></div><div className="mt-12 grid grid-cols-2 border-y border-line-strong sm:grid-cols-4">{[[Factory, "Fabricación local"], [Settings2, "Producción real"], [Truck, "Envíos en El Salvador"], [Headphones, "Soporte directo"]].map(([Icon, label], index) => { const BenefitIcon = Icon as LucideIcon; return <div key={label as string} className="border-line px-3 py-4 first:pl-0 sm:border-l sm:first:border-l-0"><span className="text-[0.58rem] font-semibold tracking-[0.16em] text-ink-faint">0{index + 1}</span><div className="mt-2 flex gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-ink-soft"><BenefitIcon className="h-4 w-4 shrink-0 text-brand" /><span>{label as string}</span></div></div>; })}</div></div><div className="relative mx-auto w-full max-w-xl lg:max-w-none"><MediaPlaceholder label="Imagen principal de maquinaria" technical className="aspect-[5/4] shadow-[0_30px_90px_-40px_rgba(0,0,0,0.9)]" /><div className="absolute -bottom-4 -left-3 grid border border-line-strong bg-surface shadow-xl sm:-left-5 sm:grid-cols-3">{[["Serie CYMT", "Fabricación local"], ["Aplicación", "Producción continua"], ["Estado", "Catálogo activo"]].map(([label, value]) => <div key={label} className="border-line px-4 py-3 sm:border-r sm:last:border-r-0"><p className="text-[0.55rem] font-semibold uppercase tracking-[0.16em] text-ink-faint">{label}</p><p className="mt-1 text-xs font-semibold uppercase tracking-[0.08em] text-ink">{value}</p></div>)}</div></div></Container></section>;
 }
 
-function MachineCategories() {
-  return (
-    <section id="maquinas" className="scroll-mt-20 py-20 md:py-28">
-      <Container>
-        <SectionHeader
-          eyebrow="Maquinaria CYMT"
-          title="Nuestras máquinas"
-          description="Soluciones para cada etapa de tu producción serigráfica."
-        />
-        <div className="mt-10 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {machineCategories.map((category, index) => (
-            <article
-              key={category.title}
-              className="group overflow-hidden border border-line bg-surface transition duration-300 hover:border-brand/70 hover:bg-surface-2"
-            >
-              <MediaPlaceholder label={`Fotografía pendiente: ${category.title}`} className="aspect-[16/10]" />
-              <div className="flex min-h-44 flex-col border-t border-line p-6">
-                <div className="flex items-center justify-between text-[0.6rem] font-semibold uppercase tracking-[0.16em] text-ink-faint">
-                  <span>Cat. 0{index + 1}</span>
-                  <span>CYMT Industrial</span>
-                </div>
-                <h2 className="mt-7 text-2xl font-semibold uppercase text-ink">{category.title}</h2>
-                <p className="mt-3 text-sm leading-relaxed text-ink-muted">{category.description}</p>
-                <span className="mt-auto inline-flex items-center gap-1.5 pt-5 text-xs font-semibold uppercase tracking-[0.14em] text-ink-soft transition group-hover:text-brand">
-                  Próximamente <ArrowUpRight className="h-4 w-4" />
-                </span>
-              </div>
-            </article>
-          ))}
-        </div>
-      </Container>
-    </section>
-  );
+function MachineCategories({ catalog }: { catalog: PublicMachineryCatalog }) {
+  return <section id="maquinas" className="scroll-mt-20 py-20 md:py-28"><Container><SectionHeader eyebrow="Maquinaria CYMT" title="Nuestras máquinas" description="Categorías publicadas para cada etapa de tu producción serigráfica." />{catalog.categories.length === 0 ? <div className="mt-10 border border-dashed border-line-strong bg-surface px-6 py-12 text-center"><p className="font-display text-xl font-semibold text-ink">Estamos preparando nuestro catálogo de maquinaria.</p><p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-ink-muted">Mientras terminamos de publicar equipos, podés contarnos qué necesitás para tu taller.</p><a href={site.whatsapp.link} target="_blank" rel="noopener noreferrer" className={cn(buttonVariants({ variant: "outline" }), "mt-6")}><MessageCircle className="h-4 w-4 text-brand" />Cotizar por WhatsApp</a></div> : <div className="mt-10 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{catalog.categories.map((category, index) => <article key={category.id} className="group overflow-hidden border border-line bg-surface transition duration-300 hover:border-brand/70 hover:bg-surface-2">{category.previewImageUrl ? <img src={category.previewImageUrl} alt={category.name} className="aspect-[16/10] w-full object-cover" /> : <MediaPlaceholder label={`Imagen pendiente: ${category.name}`} className="aspect-[16/10]" />}<div className="flex min-h-44 flex-col border-t border-line p-6"><div className="flex items-center justify-between text-[0.6rem] font-semibold uppercase tracking-[0.16em] text-ink-faint"><span>Cat. {String(index + 1).padStart(2, "0")}</span><span>{category.productCount} {category.productCount === 1 ? "equipo" : "equipos"}</span></div><h2 className="mt-7 text-2xl font-semibold uppercase text-ink">{category.name}</h2>{category.description && <p className="mt-3 text-sm leading-relaxed text-ink-muted">{category.description}</p>}<a href="#disponibles" className="mt-auto inline-flex items-center gap-1.5 pt-5 text-xs font-semibold uppercase tracking-[0.14em] text-ink-soft transition group-hover:text-brand">Ver equipos <ArrowUpRight className="h-4 w-4" /></a></div></article>)}</div>}</Container></section>;
+}
+
+function AvailableMachinery({ products }: { products: PublicMachineryProduct[] }) {
+  return <section id="disponibles" className="border-y border-line bg-bg-soft py-20 md:py-28"><Container><SectionHeader eyebrow="Catálogo publicado" title="Maquinaria disponible" description="Equipos publicados y listos para conocer con más detalle." />{products.length === 0 ? <div className="mt-10 border border-dashed border-line-strong bg-surface px-6 py-12 text-center"><p className="font-display text-xl font-semibold text-ink">Estamos preparando nuestro catálogo de maquinaria.</p><p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-ink-muted">Consultanos por WhatsApp para conocer las configuraciones disponibles.</p><a href={site.whatsapp.link} target="_blank" rel="noopener noreferrer" className={cn(buttonVariants({ variant: "outline" }), "mt-6")}><MessageCircle className="h-4 w-4 text-brand" />Cotizar por WhatsApp</a></div> : <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-3">{products.map((product) => <article key={product.id} className="group flex flex-col overflow-hidden border border-line bg-surface transition hover:border-brand/70 hover:bg-surface-2"><div className="overflow-hidden bg-[#121316]"><ProductVisual product={product} className="aspect-[5/4] transition duration-500 group-hover:scale-[1.025]" /></div><div className="flex flex-1 flex-col p-6"><div className="flex items-center justify-between gap-3 text-[0.6rem] font-semibold uppercase tracking-[0.16em] text-ink-faint"><span>{product.categoryName}</span>{product.priceNote && <span className="border border-brand/30 px-2 py-1 text-brand">{product.priceNote}</span>}</div><h2 className="mt-5 text-2xl font-semibold uppercase text-ink">{product.name}</h2><p className="mt-3 text-sm leading-relaxed text-ink-muted">{product.shortDescription}</p>{product.specifications.length > 0 && <div className="mt-5 flex flex-wrap gap-2">{product.specifications.slice(0, 2).map((specification) => <span key={`${specification.label}-${specification.value}`} className="border border-line bg-bg-soft px-2 py-1 text-[0.62rem] text-ink-muted">{specification.label}: <span className="text-ink-soft">{specification.value}</span></span>)}</div>}<Link href={`/maquinas/${product.slug}`} className={cn(buttonVariants({ variant: "outline" }), "mt-7 w-full")}>Ver detalles <ArrowRight className="h-4 w-4" /></Link></div></article>)}</div>}</Container></section>;
 }
 
 function Benefits() {
-  return (
-    <section className="border-y border-line bg-bg-soft py-20 md:py-28">
-      <Container>
-        <SectionHeader
-          eyebrow="Ventaja CYMT"
-          title="¿Por qué elegir maquinaria CYMT?"
-          description="Equipos y acompañamiento para producir con más confianza desde el primer día."
-        />
-        <div className="mt-10 grid border-y border-line sm:grid-cols-2 lg:grid-cols-5">
-          {benefits.map(({ icon: Icon, title, description }, index) => (
-            <div key={title} className="min-h-56 border-line bg-surface p-6 transition hover:bg-surface-2 lg:border-r lg:last:border-r-0">
-              <span className="text-[0.58rem] font-semibold tracking-[0.16em] text-ink-faint">0{index + 1}</span>
-              <Icon className="h-5 w-5 text-brand" />
-              <h3 className="mt-7 font-display text-lg font-semibold uppercase">{title}</h3>
-              <p className="mt-3 text-sm leading-relaxed text-ink-muted">{description}</p>
-            </div>
-          ))}
-        </div>
-      </Container>
-    </section>
-  );
+  return <section className="border-b border-line bg-bg-soft py-20 md:py-28"><Container><SectionHeader eyebrow="Ventaja CYMT" title="¿Por qué elegir maquinaria CYMT?" description="Equipos y acompañamiento para producir con más confianza desde el primer día." /><div className="mt-10 grid border-y border-line sm:grid-cols-2 lg:grid-cols-5">{benefits.map(({ icon: Icon, title, description }, index) => <div key={title} className="min-h-56 border-line bg-surface p-6 transition hover:bg-surface-2 lg:border-r lg:last:border-r-0"><span className="text-[0.58rem] font-semibold tracking-[0.16em] text-ink-faint">0{index + 1}</span><Icon className="mt-5 h-5 w-5 text-brand" /><h3 className="mt-7 font-display text-lg font-semibold uppercase">{title}</h3><p className="mt-3 text-sm leading-relaxed text-ink-muted">{description}</p></div>)}</div></Container></section>;
 }
 
 function ConversionCta() {
-  return (
-    <section className="py-20 md:py-28">
-      <Container>
-        <div className="relative overflow-hidden border border-line-strong bg-surface px-6 py-14 md:px-12 md:py-16">
-          <div className="absolute inset-y-0 right-0 w-1/3 border-l border-line bg-[linear-gradient(135deg,transparent_0%,rgba(255,255,255,0.03)_100%)]" />
-          <div className="relative max-w-2xl">
-            <span className="eyebrow text-brand">Asesoría de producción / CYMT</span>
-            <h2 className="mt-4 text-balance text-3xl font-bold leading-tight md:text-5xl">
-              ¿Estás equipando tu taller?
-            </h2>
-            <p className="mt-4 max-w-xl text-ink-muted md:text-lg">
-              Contanos qué querés producir y te ayudamos a definir el equipo adecuado.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <a
-                href={site.whatsapp.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={buttonVariants({ size: "lg" })}
-              >
-                <MessageCircle className="h-4 w-4" /> Cotizar por WhatsApp
-              </a>
-              <Link href="/maquinas/tintas" className={buttonVariants({ variant: "outline", size: "lg" })}>
-                Ver tintas <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-          </div>
-        </div>
-      </Container>
-    </section>
-  );
+  return <section className="py-20 md:py-28"><Container><div className="relative overflow-hidden border border-line-strong bg-surface px-6 py-14 md:px-12 md:py-16"><div className="absolute inset-y-0 right-0 w-1/3 border-l border-line bg-[linear-gradient(135deg,transparent_0%,rgba(255,255,255,0.03)_100%)]" /><div className="relative max-w-2xl"><span className="eyebrow text-brand">Asesoría de producción / CYMT</span><h2 className="mt-4 text-balance text-3xl font-bold leading-tight md:text-5xl">¿Estás equipando tu taller?</h2><p className="mt-4 max-w-xl text-ink-muted md:text-lg">Contanos qué querés producir y te ayudamos a definir el equipo adecuado.</p><div className="mt-8 flex flex-wrap gap-3"><a href={site.whatsapp.link} target="_blank" rel="noopener noreferrer" className={buttonVariants({ size: "lg" })}><MessageCircle className="h-4 w-4" />Cotizar por WhatsApp</a><Link href="/maquinas/tintas" className={buttonVariants({ variant: "outline", size: "lg" })}>Ver tintas <ArrowRight className="h-4 w-4" /></Link></div></div></div></Container></section>;
 }
 
 function InkCrossSell() {
-  return (
-    <section className="pb-20 md:pb-28">
-      <Container>
-        <div className="grid overflow-hidden border border-line bg-bg-soft lg:grid-cols-[0.9fr_1.1fr]">
-          <MediaPlaceholder label="Imagen pendiente de CMT Ink" className="min-h-72 lg:min-h-full" />
-          <div className="flex items-center px-6 py-14 md:px-12 md:py-16">
-            <div className="max-w-xl">
-              <p className="eyebrow">Complemento de proceso / CMT Ink</p>
-              <h2 className="mt-4 text-4xl font-bold uppercase md:text-5xl">CMT <span className="text-brand">Ink</span></h2>
-              <p className="mt-5 text-ink-muted md:text-lg">
-                Tintas serigráficas y soluciones para complementar tu proceso de producción.
-              </p>
-              <Link href="/maquinas/tintas" className={cn(buttonVariants({ variant: "secondary" }), "mt-8")}>
-                Conocé nuestras tintas <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-          </div>
-        </div>
-      </Container>
-    </section>
-  );
+  return <section className="pb-20 md:pb-28"><Container><div className="grid overflow-hidden border border-line bg-bg-soft lg:grid-cols-[0.9fr_1.1fr]"><MediaPlaceholder label="Imagen pendiente de CMT Ink" className="min-h-72 lg:min-h-full" /><div className="flex items-center px-6 py-14 md:px-12 md:py-16"><div className="max-w-xl"><p className="eyebrow">Complemento de proceso / CMT Ink</p><h2 className="mt-4 text-4xl font-bold uppercase md:text-5xl">CMT <span className="text-brand">Ink</span></h2><p className="mt-5 text-ink-muted md:text-lg">Tintas serigráficas y soluciones para complementar tu proceso de producción.</p><Link href="/maquinas/tintas" className={cn(buttonVariants({ variant: "secondary" }), "mt-8")}>Conocé nuestras tintas <ArrowRight className="h-4 w-4" /></Link></div></div></div></Container></section>;
 }
 
-export function MachineryLanding() {
-  return (
-    <>
-      <Hero />
-      <MachineCategories />
-      <Benefits />
-      <ConversionCta />
-      <InkCrossSell />
-    </>
-  );
+export function MachineryLanding({ catalog }: { catalog: PublicMachineryCatalog }) {
+  return <><Hero /><MachineCategories catalog={catalog} /><AvailableMachinery products={catalog.products} /><Benefits /><ConversionCta /><InkCrossSell /></>;
 }

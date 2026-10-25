@@ -27,7 +27,7 @@ export const ADMIN_MODULES: readonly AdminModuleDefinition[] = [
     navigationLabel: "Máquinas",
     description: "Catálogo de maquinaria, categorías, imágenes y contenido técnico.",
     href: "/admin/maquinas",
-    status: "planned",
+    status: "active",
     futureAreas: ["Contenido", "Categorías", "Productos", "Imágenes", "Información técnica"],
   },
   {
