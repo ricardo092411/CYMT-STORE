@@ -36,8 +36,8 @@ export const ADMIN_MODULES: readonly AdminModuleDefinition[] = [
     navigationLabel: "Tintas",
     description: "Productos Glow, presentaciones, imágenes e información técnica.",
     href: "/admin/tintas",
-    status: "planned",
-    futureAreas: ["Contenido", "Categorías", "Productos", "Imágenes", "Información técnica"],
+    status: "active",
+    futureAreas: ["Productos Glow", "Imágenes", "Información técnica"],
   },
   {
     id: "confeccion",

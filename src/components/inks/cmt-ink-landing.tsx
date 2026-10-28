@@ -16,15 +16,8 @@ import {
 } from "lucide-react";
 import { Container, SectionHeader, buttonVariants } from "@/components/ui";
 import { site } from "@/data/site";
+import type { PublicInkCatalog, PublicInkProduct } from "@/lib/public-inks";
 import { cn } from "@/lib/utils";
-
-// Presentation placeholders only. Product names, stock, pricing and media will be connected later.
-const glowLinePlaceholders = [
-  { name: "Glow Verde", detail: "Placeholder de presentación", accent: "bg-[#b8f36b]" },
-  { name: "Glow Azul", detail: "Placeholder de presentación", accent: "bg-[#9be7ff]" },
-  { name: "Glow Amarillo", detail: "Placeholder de presentación", accent: "bg-[#f6e56c]" },
-  { name: "Otros tonos Glow", detail: "Placeholder de presentación", accent: "bg-[#d7c7ff]" },
-] as const;
 
 const heroBenefits: { icon: LucideIcon; title: string; description: string }[] = [
   { icon: Sparkles, title: "Efecto fotoluminiscente", description: "Un acabado visual pensado para destacar." },
@@ -78,6 +71,14 @@ function GlowMediaPlaceholder({ label, className }: { label: string; className?:
         {label}
       </span>
     </div>
+  );
+}
+
+function GlowProductVisual({ product }: { product: PublicInkProduct }) {
+  return product.primaryImageUrl ? (
+    <img src={product.primaryImageUrl} alt={product.name} className="aspect-square w-full object-cover" />
+  ) : (
+    <GlowMediaPlaceholder label={`Imagen pendiente: ${product.name}`} className="aspect-square" />
   );
 }
 
@@ -142,27 +143,39 @@ function Benefits() {
   );
 }
 
-function GlowLine() {
+function GlowLine({ products }: { products: PublicInkProduct[] }) {
   return (
     <section id="linea-glow" className="scroll-mt-20 py-20 md:py-28">
       <Container>
         <SectionHeader
           eyebrow="CMT Ink"
           title="Nuestra línea Glow in the Dark"
-          description="Una presentación visual de los tonos Glow que podrá conectarse a productos y colores reales más adelante."
+          description="Productos Glow publicados y listos para conocer con más detalle."
         />
-        <div className="mt-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {glowLinePlaceholders.map(({ name, detail, accent }) => (
-            <article key={name} className="overflow-hidden rounded-2xl border border-line bg-surface">
-              <GlowMediaPlaceholder label={`Media pendiente: ${name}`} className="aspect-square" />
-              <div className="p-5">
-                <span className={cn("mb-5 block h-1.5 w-12 rounded-full", accent)} />
-                <h2 className="text-xl font-semibold">{name}</h2>
-                <p className="mt-2 text-sm text-ink-muted">{detail}</p>
-              </div>
-            </article>
-          ))}
-        </div>
+        {products.length === 0 ? (
+          <div className="mt-10 rounded-2xl border border-dashed border-line-strong bg-surface px-6 py-12 text-center">
+            <p className="font-display text-xl font-semibold text-ink">Estamos preparando nuestra línea Glow in the Dark.</p>
+            <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-ink-muted">Consultanos por WhatsApp para conocer las próximas presentaciones.</p>
+            <a href={site.whatsapp.link} target="_blank" rel="noopener noreferrer" className={cn(buttonVariants({ variant: "outline" }), "mt-6")}>
+              <MessageCircle className="h-4 w-4 text-[#b8f36b]" /> Cotizar por WhatsApp
+            </a>
+          </div>
+        ) : (
+          <div className="mt-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {products.map((product) => (
+              <article key={product.id} className="group overflow-hidden rounded-2xl border border-line bg-surface transition hover:border-[#b8f36b]/60">
+                <div className="overflow-hidden bg-[#111412]"><GlowProductVisual product={product} /></div>
+                <div className="flex min-h-52 flex-col p-5">
+                  {product.priceNote && <span className="w-fit border border-[#b8f36b]/35 bg-[#b8f36b]/10 px-2 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-[#b8f36b]">{product.priceNote}</span>}
+                  <h2 className="mt-5 text-xl font-semibold">{product.name}</h2>
+                  <p className="mt-2 text-sm leading-relaxed text-ink-muted">{product.shortDescription}</p>
+                  {product.specifications.length > 0 && <p className="mt-4 text-xs text-ink-faint">{product.specifications.slice(0, 2).map((item) => `${item.label}: ${item.value}`).join(" · ")}</p>}
+                  <Link href={`/tintas/${product.slug}`} className={cn(buttonVariants({ variant: "outline" }), "mt-auto w-full pt-2")}>Ver detalles <ArrowRight className="h-4 w-4" /></Link>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </Container>
     </section>
   );
@@ -310,12 +323,12 @@ function MachineryCrossSell() {
   );
 }
 
-export function CmtInkLanding() {
+export function CmtInkLanding({ catalog = { products: [] } }: { catalog?: PublicInkCatalog }) {
   return (
     <>
       <InkHero />
       <Benefits />
-      <GlowLine />
+      <GlowLine products={catalog.products} />
       <HowItWorks />
       <ApplicationsAndReasons />
       <TechnicalInfo />

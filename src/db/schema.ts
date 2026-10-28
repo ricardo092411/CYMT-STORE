@@ -206,6 +206,49 @@ export const machineryProductImages = pgTable(
   ],
 );
 
+/* --------------------------- CMT Ink CMS ------------------------- */
+
+/** Flexible public product data. Internal formulas are intentionally not modeled. */
+export type InkSpecification = {
+  label: string;
+  value: string;
+};
+
+export const inkProducts = pgTable("ink_products", {
+  id: serial("id").primaryKey(),
+  slug: varchar("slug", { length: 160 }).notNull().unique(),
+  name: varchar("name", { length: 200 }).notNull(),
+  shortDescription: varchar("short_description", { length: 500 }).notNull(),
+  description: text("description"),
+  specifications: jsonb("specifications").$type<InkSpecification[]>(),
+  priceNote: varchar("price_note", { length: 160 }),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  isPublished: boolean("is_published").default(false).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const inkProductImages = pgTable(
+  "ink_product_images",
+  {
+    id: serial("id").primaryKey(),
+    productId: integer("product_id")
+      .notNull()
+      .references(() => inkProducts.id, { onDelete: "cascade" }),
+    storagePath: text("storage_path").notNull(),
+    altText: varchar("alt_text", { length: 300 }),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    isPrimary: boolean("is_primary").default(false).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("ink_product_images_product_sort_order_unique").on(table.productId, table.sortOrder),
+    uniqueIndex("ink_product_images_primary_per_product_unique")
+      .on(table.productId)
+      .where(sql`${table.isPrimary} = true`),
+  ],
+);
+
 /* --------------------------- Club CYMT --------------------------- */
 
 export const clubMembers = pgTable("club_members", {
