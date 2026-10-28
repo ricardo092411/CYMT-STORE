@@ -18,6 +18,7 @@
 
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   index,
@@ -29,6 +30,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  uuid,
   varchar,
 } from "drizzle-orm/pg-core";
 
@@ -306,6 +308,139 @@ export const confectionProductImages = pgTable(
     uniqueIndex("confection_product_images_primary_per_product_unique")
       .on(table.productId)
       .where(sql`${table.isPrimary} = true`),
+  ],
+);
+
+/* ----------------------- Digital downloads CMS ----------------------- */
+
+export type DigitalSpecification = {
+  label: string;
+  value: string;
+};
+
+export const digitalCategories = pgTable("digital_categories", {
+  id: serial("id").primaryKey(),
+  slug: varchar("slug", { length: 160 }).notNull().unique(),
+  name: varchar("name", { length: 160 }).notNull(),
+  description: text("description"),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  isPublished: boolean("is_published").default(false).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const digitalProducts = pgTable(
+  "digital_products",
+  {
+    id: serial("id").primaryKey(),
+    categoryId: integer("category_id")
+      .notNull()
+      .references(() => digitalCategories.id, { onDelete: "restrict" }),
+    slug: varchar("slug", { length: 160 }).notNull().unique(),
+    name: varchar("name", { length: 200 }).notNull(),
+    shortDescription: varchar("short_description", { length: 500 }).notNull(),
+    description: text("description"),
+    specifications: jsonb("specifications").$type<DigitalSpecification[]>(),
+    priceCents: integer("price_cents").notNull(),
+    currency: varchar("currency", { length: 3 }).default("USD").notNull(),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    isPublished: boolean("is_published").default(false).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("digital_products_category_id_idx").on(table.categoryId),
+    check("digital_products_price_cents_check", sql`${table.priceCents} >= 0`),
+  ],
+);
+
+export const digitalProductImages = pgTable(
+  "digital_product_images",
+  {
+    id: serial("id").primaryKey(),
+    productId: integer("product_id")
+      .notNull()
+      .references(() => digitalProducts.id, { onDelete: "cascade" }),
+    storagePath: text("storage_path").notNull(),
+    altText: varchar("alt_text", { length: 300 }),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    isPrimary: boolean("is_primary").default(false).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("digital_product_images_product_id_idx").on(table.productId),
+    uniqueIndex("digital_product_images_product_sort_order_unique").on(table.productId, table.sortOrder),
+    uniqueIndex("digital_product_images_primary_per_product_unique")
+      .on(table.productId)
+      .where(sql`${table.isPrimary} = true`),
+  ],
+);
+
+export const digitalProductFiles = pgTable(
+  "digital_product_files",
+  {
+    id: serial("id").primaryKey(),
+    productId: integer("product_id")
+      .notNull()
+      .references(() => digitalProducts.id, { onDelete: "cascade" }),
+    storagePath: text("storage_path").notNull().unique(),
+    originalName: varchar("original_name", { length: 300 }).notNull(),
+    mimeType: varchar("mime_type", { length: 160 }),
+    sizeBytes: bigint("size_bytes", { mode: "number" }),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("digital_product_files_product_id_idx").on(table.productId),
+    uniqueIndex("digital_product_files_product_sort_order_unique").on(table.productId, table.sortOrder),
+  ],
+);
+
+export const digitalOrders = pgTable(
+  "digital_orders",
+  {
+    id: serial("id").primaryKey(),
+    publicId: uuid("public_id").defaultRandom().notNull().unique(),
+    accessTokenHash: text("access_token_hash").notNull(),
+    customerEmail: varchar("customer_email", { length: 320 }).notNull(),
+    customerName: varchar("customer_name", { length: 200 }),
+    paymentMethod: varchar("payment_method", { length: 32 }).notNull(),
+    status: varchar("status", { length: 32 }).notNull(),
+    currency: varchar("currency", { length: 3 }).default("USD").notNull(),
+    subtotalCents: integer("subtotal_cents").notNull(),
+    totalCents: integer("total_cents").notNull(),
+    paypalOrderId: text("paypal_order_id").unique(),
+    paypalCaptureId: text("paypal_capture_id").unique(),
+    paymentReference: varchar("payment_reference", { length: 200 }),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("digital_orders_customer_email_idx").on(table.customerEmail),
+    index("digital_orders_status_idx").on(table.status),
+    check("digital_orders_payment_method_check", sql`${table.paymentMethod} in ('bank_transfer', 'paypal')`),
+    check("digital_orders_status_check", sql`${table.status} in ('pending_payment', 'payment_review', 'paid', 'payment_failed', 'cancelled', 'refunded')`),
+    check("digital_orders_amounts_check", sql`${table.subtotalCents} >= 0 and ${table.totalCents} >= 0`),
+  ],
+);
+
+export const digitalOrderItems = pgTable(
+  "digital_order_items",
+  {
+    id: serial("id").primaryKey(),
+    orderId: integer("order_id")
+      .notNull()
+      .references(() => digitalOrders.id, { onDelete: "cascade" }),
+    productId: integer("product_id").references(() => digitalProducts.id, { onDelete: "set null" }),
+    productNameSnapshot: varchar("product_name_snapshot", { length: 200 }).notNull(),
+    productSlugSnapshot: varchar("product_slug_snapshot", { length: 160 }).notNull(),
+    unitPriceCents: integer("unit_price_cents").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("digital_order_items_order_id_idx").on(table.orderId),
+    check("digital_order_items_unit_price_cents_check", sql`${table.unitPriceCents} >= 0`),
   ],
 );
 

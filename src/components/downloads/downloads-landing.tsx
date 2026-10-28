@@ -18,6 +18,7 @@ import {
 import { Container, SectionHeader, buttonVariants } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { DigitalResourceCard } from "@/components/downloads/digital-resource-card";
+import type { PublicDigitalCatalog } from "@/lib/public-downloads";
 
 const categories: { number: string; title: string; description: string; icon: LucideIcon }[] = [
   { number: "01", title: "Separaciones", description: "Archivos preparados para impresión por colores y procesos de separación.", icon: Layers3 },
@@ -87,13 +88,14 @@ function Hero() {
   );
 }
 
-function Categories() {
+function Categories({ catalog }: { catalog: PublicDigitalCatalog }) {
+  const visibleCategories = catalog.categories.length > 0 ? catalog.categories.map((category, index) => ({ number: String(index + 1).padStart(2, "0"), title: category.name, description: category.description ?? "Recursos digitales organizados para este flujo de producción.", icon: categories[index % categories.length]!.icon })) : categories;
   return (
     <section id="categorias" className="scroll-mt-20 py-20 md:py-28">
       <Container>
         <SectionHeader eyebrow="Biblioteca CYMT" title="Explorá por categoría" description="Recursos organizados para distintos flujos de producción y presentación." />
         <div className="mt-10 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {categories.map(({ number, title, description, icon: Icon }) => (
+          {visibleCategories.map(({ number, title, description, icon: Icon }) => (
             <article key={title} className="group min-h-56 rounded-2xl border border-line bg-surface p-6 transition hover:-translate-y-1 hover:border-line-strong hover:bg-surface-2">
               <div className="flex items-start justify-between"><span className="text-xs font-semibold tracking-[0.16em] text-brand">{number}</span><Icon className="h-5 w-5 text-ink-faint transition group-hover:text-brand" /></div>
               <h2 className="mt-10 text-xl font-semibold">{title}</h2>
@@ -106,13 +108,13 @@ function Categories() {
   );
 }
 
-function ResourceGrid() {
+function ResourceGrid({ catalog }: { catalog: PublicDigitalCatalog }) {
   return (
     <section id="recursos" className="scroll-mt-20 border-y border-line bg-bg-soft py-20 md:py-28">
       <Container>
-        <SectionHeader eyebrow="Selección visual" title="Recursos destacados" description="Tarjetas DEMO preparadas para previews, formatos, datos técnicos y precio futuro." />
+        <SectionHeader eyebrow="Selección visual" title="Recursos destacados" description={catalog.products.length > 0 ? "Recursos publicados disponibles para compra segura." : "Mientras llega el catálogo, esta selección editorial presenta los flujos disponibles."} />
         <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {demoResources.map((resource) => <DigitalResourceCard key={resource.title} {...resource} />)}
+          {catalog.products.length > 0 ? catalog.products.map((product) => <DigitalResourceCard key={product.id} title={product.name} category={product.categoryName} technicalLabels={product.specifications.slice(0, 2).map((specification) => `${specification.label}: ${specification.value}`)} href={`/descargas/${product.slug}`} previewUrl={product.primaryImageUrl} priceCents={product.priceCents} />) : demoResources.map((resource) => <DigitalResourceCard key={resource.title} {...resource} />)}
         </div>
       </Container>
     </section>
@@ -176,6 +178,6 @@ function TrustFormatsAndCta() {
   );
 }
 
-export function DownloadsLanding() {
-  return <><Hero /><Categories /><ResourceGrid /><DetailAndPaymentPreview /><FutureFlow /><TrustFormatsAndCta /></>;
+export function DownloadsLanding({ catalog }: { catalog: PublicDigitalCatalog }) {
+  return <><Hero /><Categories catalog={catalog} /><ResourceGrid catalog={catalog} /><DetailAndPaymentPreview /><FutureFlow /><TrustFormatsAndCta /></>;
 }

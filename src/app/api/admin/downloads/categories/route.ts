@@ -1,0 +1,6 @@
+import { NextResponse } from "next/server";
+import { createDigitalCategory, DownloadsSlugConflictError, DownloadsValidationError, listDigitalCategories, parseDigitalCategoryPayload } from "@/lib/admin-downloads";
+import { isAdmin } from "@/lib/auth/admin";
+export const runtime = "nodejs";
+export async function GET() { if (!(await isAdmin())) return NextResponse.json({ error: "No autorizado" }, { status: 401 }); try { return NextResponse.json({ categories: await listDigitalCategories() }); } catch (error) { console.error("[downloads-categories] list failed", error); return NextResponse.json({ error: "No fue posible cargar las categorías" }, { status: 500 }); } }
+export async function POST(request: Request) { if (!(await isAdmin())) return NextResponse.json({ error: "No autorizado" }, { status: 401 }); try { return NextResponse.json({ category: await createDigitalCategory(parseDigitalCategoryPayload(await request.json())) }, { status: 201 }); } catch (error) { if (error instanceof DownloadsValidationError || error instanceof DownloadsSlugConflictError) return NextResponse.json({ error: error.message }, { status: 400 }); console.error("[downloads-categories] create failed", error); return NextResponse.json({ error: "No fue posible crear la categoría" }, { status: 500 }); } }

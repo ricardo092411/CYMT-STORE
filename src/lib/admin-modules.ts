@@ -52,10 +52,10 @@ export const ADMIN_MODULES: readonly AdminModuleDefinition[] = [
     id: "descargas",
     title: "Descargas",
     navigationLabel: "Descargas",
-    description: "Productos digitales, categorías, previews, precios y archivos.",
+    description: "Marketplace digital, archivos privados, pagos y acceso autorizado.",
     href: "/admin/descargas",
-    status: "planned",
-    futureAreas: ["Contenido", "Categorías", "Productos digitales", "Previews", "Archivos"],
+    status: "active",
+    futureAreas: ["Categorías", "Productos digitales", "Previews", "Archivos privados", "Órdenes"],
   },
 ] as const;
 

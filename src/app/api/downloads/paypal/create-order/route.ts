@@ -1,0 +1,5 @@
+import { NextResponse } from "next/server";
+import { DigitalOrderAuthorizationError, DigitalOrderNotFoundError, parseOrderAccess } from "@/lib/digital-orders";
+import { createPaypalOrder } from "@/lib/paypal-downloads";
+export const runtime = "nodejs";
+export async function POST(request: Request) { try { const body: unknown = await request.json(); if (typeof body !== "object" || body === null || typeof (body as { publicId?: unknown }).publicId !== "string") return NextResponse.json({ error: "Pedido inválido" }, { status: 400 }); return NextResponse.json(await createPaypalOrder((body as { publicId: string }).publicId, parseOrderAccess(body))); } catch (error) { if (error instanceof DigitalOrderAuthorizationError) return NextResponse.json({ error: error.message }, { status: 403 }); if (error instanceof DigitalOrderNotFoundError) return NextResponse.json({ error: error.message }, { status: 404 }); console.error("[paypal-create] failed", error); return NextResponse.json({ error: "No fue posible crear la orden PayPal" }, { status: 400 }); } }
