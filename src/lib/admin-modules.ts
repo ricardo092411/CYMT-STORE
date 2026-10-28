@@ -43,10 +43,10 @@ export const ADMIN_MODULES: readonly AdminModuleDefinition[] = [
     id: "confeccion",
     title: "Confección",
     navigationLabel: "Confección",
-    description: "Categorías, líneas de producto, imágenes y contenido textil.",
+    description: "Catálogo textil, categorías, productos, especificaciones e imágenes.",
     href: "/admin/confeccion",
-    status: "planned",
-    futureAreas: ["Contenido", "Categorías", "Líneas de producto", "Imágenes"],
+    status: "active",
+    futureAreas: ["Categorías", "Productos", "Especificaciones", "Imágenes"],
   },
   {
     id: "descargas",

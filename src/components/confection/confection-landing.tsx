@@ -6,32 +6,12 @@ import {
   Layers3,
   MessageCircle,
   Ruler,
-  Scissors,
-  Shirt,
-  Sparkles,
-  Users,
   Wrench,
 } from "lucide-react";
 import { Container, SectionHeader, buttonVariants } from "@/components/ui";
 import { site } from "@/data/site";
+import type { PublicConfectionCatalog } from "@/lib/public-confection";
 import { cn } from "@/lib/utils";
-
-// Presentation data lives together so future admin-backed content can replace it without changing the layout.
-const categories = [
-  { title: "Prendas personalizadas", description: "Piezas textiles pensadas para tu marca, equipo o proyecto.", icon: Shirt },
-  { title: "Uniformes", description: "Opciones coordinadas para negocios, equipos y atención al cliente.", icon: Users },
-  { title: "Gabachas y delantales", description: "Prendas funcionales para trabajo, servicio y cocina.", icon: Scissors },
-  { title: "Manteles", description: "Textiles para mesas, eventos y espacios comerciales.", icon: Layers3 },
-  { title: "Especiales", description: "Piezas que requieren una propuesta textil particular.", icon: Sparkles },
-  { title: "A medida", description: "Proyectos que parten de una necesidad concreta y propia.", icon: Ruler },
-] as const;
-
-const productLines = [
-  { title: "Camisetas y polos", label: "Línea de prendas", tone: "bg-[#d9a78e]" },
-  { title: "Gabachas y delantales", label: "Línea de trabajo", tone: "bg-[#b98670]" },
-  { title: "Mantelería", label: "Línea de espacios", tone: "bg-[#cbb49c]" },
-  { title: "Uniformes coordinados", label: "Línea institucional", tone: "bg-[#95695a]" },
-] as const;
 
 const differentiators = [
   { title: "Atención directa", description: "Conversaciones claras para entender lo que tu proyecto necesita.", icon: MessageCircle },
@@ -91,7 +71,7 @@ function Hero() {
             <a href={site.whatsapp.link} target="_blank" rel="noopener noreferrer" className={buttonVariants({ size: "lg" })}>
               Cotizar por WhatsApp <MessageCircle className="h-4 w-4" />
             </a>
-            <a href="#lineas" className="inline-flex items-center justify-center gap-2 rounded-full border border-[#a88473] px-5 py-3 text-sm font-semibold text-[#4e352b] transition hover:border-[#714637] hover:bg-white/70">
+            <a href="#catalogo" className="inline-flex items-center justify-center gap-2 rounded-full border border-[#a88473] px-5 py-3 text-sm font-semibold text-[#4e352b] transition hover:border-[#714637] hover:bg-white/70">
               Ver líneas textiles <ArrowRight className="h-4 w-4" />
             </a>
           </div>
@@ -120,49 +100,28 @@ function Hero() {
   );
 }
 
-function Categories() {
+function Categories({ categories }: Pick<PublicConfectionCatalog, "categories">) {
   return (
     <section id="categorias" className="scroll-mt-20 bg-[#fffaf5] py-24 text-[#2b2420] md:py-32">
       <Container>
         <div className="max-w-3xl border-l-2 border-brand pl-5 md:pl-7">
-          <SectionHeader eyebrow="Universo CYMT" title="Confección para distintos proyectos" description="Una base de categorías pensada para crecer a medida que sumemos nuevas líneas y necesidades textiles." />
+          <SectionHeader eyebrow="Universo CYMT" title="Confección para distintos proyectos" description="Categorías activas de nuestro catálogo textil." />
         </div>
-        <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-5">
-          {categories.map(({ title, description, icon: Icon }, index) => (
-            <article key={title} className="group min-h-60 border border-[#e0d2c6] bg-[#f8f1e9] p-7 transition duration-500 hover:-translate-y-1 hover:border-[#be8b73] hover:bg-white lg:[&:nth-child(2)]:translate-y-8 lg:[&:nth-child(5)]:translate-y-8">
-              <div className="flex items-start justify-between border-b border-[#ddcdbf] pb-5"><span className="text-xs font-semibold tracking-[0.16em] text-brand">0{index + 1}</span><Icon className="h-5 w-5 text-[#a87862] transition duration-500 group-hover:rotate-6 group-hover:text-brand" /></div>
-              <h2 className="mt-9 font-display text-2xl font-semibold text-[#382923]">{title}</h2>
-              <p className="mt-3 max-w-sm text-sm leading-relaxed text-[#735e53]">{description}</p>
-            </article>
-          ))}
-        </div>
+        {categories.length > 0 && <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-5">{categories.map((category, index) => <article key={category.id} className="group overflow-hidden border border-[#e0d2c6] bg-[#f8f1e9] transition duration-500 hover:-translate-y-1 hover:border-[#be8b73] hover:bg-white lg:[&:nth-child(2)]:translate-y-8 lg:[&:nth-child(5)]:translate-y-8">{category.previewImageUrl ? <img src={category.previewImageUrl} alt="" className="aspect-[16/9] w-full object-cover" /> : <TextilePlaceholder label="Imagen de categoría pendiente" className="aspect-[16/9] border-x-0 border-t-0" />}<div className="p-7"><div className="flex items-start justify-between border-b border-[#ddcdbf] pb-5"><span className="text-xs font-semibold tracking-[0.16em] text-brand">{String(index + 1).padStart(2, "0")}</span><Layers3 className="h-5 w-5 text-[#a87862]" /></div><h2 className="mt-7 font-display text-2xl font-semibold text-[#382923]">{category.name}</h2>{category.description && <p className="mt-3 max-w-sm text-sm leading-relaxed text-[#735e53]">{category.description}</p>}<p className="mt-4 text-xs font-semibold uppercase tracking-[0.14em] text-[#a2745e]">{category.productCount} {category.productCount === 1 ? "producto" : "productos"}</p></div></article>)}</div>}
       </Container>
     </section>
   );
 }
 
-function ProductLines() {
+function ProductLines({ products }: Pick<PublicConfectionCatalog, "products">) {
   return (
-    <section id="lineas" className="scroll-mt-20 bg-[#e9ddd0] py-24 text-[#2b2420] md:py-32">
+    <section id="catalogo" className="scroll-mt-20 bg-[#e9ddd0] py-24 text-[#2b2420] md:py-32">
       <Container>
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-end">
-          <SectionHeader eyebrow="Líneas de producto" title="Capacidades que se ven como catálogo" description="Una presentación inicial de líneas textiles; las imágenes, fichas y descripciones podrán sumarse a cada una más adelante." />
-          <p className="border-l border-[#a87a64] pl-4 text-sm leading-relaxed text-[#735e53]">Selección visual de líneas. Sin precios, stock ni productos comprables todavía.</p>
+          <SectionHeader eyebrow="Catálogo de confección" title="Piezas disponibles para tu proyecto" description="Productos publicados desde el equipo de Confección CYMT." />
+          <p className="border-l border-[#a87a64] pl-4 text-sm leading-relaxed text-[#735e53]">Cada pieza se cotiza de forma directa según tu proyecto.</p>
         </div>
-        <div className="mt-14 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          {productLines.map(({ title, label, tone }, index) => (
-            <article key={title} className="overflow-hidden border border-[#d2bcab] bg-[#fffaf5] shadow-[0_16px_32px_-30px_rgba(69,40,28,0.7)] transition duration-500 hover:-translate-y-1 xl:[&:nth-child(even)]:translate-y-10">
-              <div className="relative aspect-[4/5] overflow-hidden bg-[#d5bdab]">
-                <div className={cn("absolute inset-x-[13%] bottom-[11%] top-[13%] rounded-[46%_46%_18%_18%] opacity-75", tone)} />
-                <div className="absolute inset-x-[20%] top-[21%] h-px bg-white/70" />
-                <div className="absolute inset-x-[11%] bottom-[18%] h-10 rounded-full border border-white/30 bg-white/15" />
-                <span className="absolute left-4 top-4 rounded-full bg-[#fffaf5]/85 px-2.5 py-1 text-[0.55rem] font-semibold uppercase tracking-[0.15em] text-[#745043]">{`0${index + 1}`}</span>
-                <span className="absolute bottom-4 left-4 text-[0.57rem] font-semibold uppercase tracking-[0.17em] text-[#fff8f2]">Imagen de línea pendiente</span>
-              </div>
-              <div className="p-6"><p className="text-[0.6rem] font-semibold uppercase tracking-[0.15em] text-[#a2745e]">{label}</p><h2 className="mt-3 font-display text-2xl font-semibold">{title}</h2><p className="mt-3 text-sm leading-relaxed text-[#776258]">Presentación visual preparada para ampliar con información y fotografías confirmadas.</p></div>
-            </article>
-          ))}
-        </div>
+        {products.length === 0 ? <div className="mt-14 border border-[#d2bcab] bg-[#fffaf5] p-8 text-[#735e53]">Estamos preparando nuestro catálogo de confección. <a href={site.whatsapp.link} target="_blank" rel="noopener noreferrer" className="font-semibold text-brand underline underline-offset-4">Consultanos por WhatsApp.</a></div> : <div className="mt-14 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">{products.map((product, index) => <Link key={product.id} href={`/confeccion/${product.slug}`} className="group overflow-hidden border border-[#d2bcab] bg-[#fffaf5] shadow-[0_16px_32px_-30px_rgba(69,40,28,0.7)] transition duration-500 hover:-translate-y-1 xl:[&:nth-child(even)]:translate-y-10"><div className="relative aspect-[4/5] overflow-hidden bg-[#d5bdab]">{product.primaryImageUrl ? <img src={product.primaryImageUrl} alt={product.name} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" /> : <TextilePlaceholder label={`Imagen pendiente · ${product.name}`} className="h-full border-0" />}<span className="absolute left-4 top-4 rounded-full bg-[#fffaf5]/85 px-2.5 py-1 text-[0.55rem] font-semibold uppercase tracking-[0.15em] text-[#745043]">{String(index + 1).padStart(2, "0")}</span></div><div className="p-6"><p className="text-[0.6rem] font-semibold uppercase tracking-[0.15em] text-[#a2745e]">{product.categoryName}</p><h2 className="mt-3 font-display text-2xl font-semibold">{product.name}</h2><p className="mt-3 text-sm leading-relaxed text-[#776258]">{product.shortDescription}</p>{product.priceNote && <p className="mt-4 text-sm font-semibold text-[#5d392e]">{product.priceNote}</p>}<span className="mt-5 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.13em] text-brand">Ver detalle <ArrowRight className="h-3.5 w-3.5" /></span></div></Link>)}</div>}
       </Container>
     </section>
   );
@@ -211,6 +170,6 @@ function MachineryCrossSell() {
   );
 }
 
-export function ConfectionLanding() {
-  return <><Hero /><Categories /><ProductLines /><Differentiators /><Process /><FlexibilityAndCta /><MachineryCrossSell /></>;
+export function ConfectionLanding({ catalog }: { catalog: PublicConfectionCatalog }) {
+  return <><Hero /><Categories categories={catalog.categories} /><ProductLines products={catalog.products} /><Differentiators /><Process /><FlexibilityAndCta /><MachineryCrossSell /></>;
 }
