@@ -13,7 +13,6 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
-  WalletCards,
 } from "lucide-react";
 import { Container, SectionHeader, buttonVariants } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -30,15 +29,6 @@ const categories: { number: string; title: string; description: string; icon: Lu
   { number: "07", title: "Plotter de corte", description: "Plantillas y recursos vectoriales para flujos con plotters compatibles.", icon: SlidersHorizontal },
 ];
 
-const demoResources = [
-  { title: "Recurso de ejemplo", category: "Separaciones", formats: ["PSD", "PNG"], technicalLabels: ["Datos técnicos demo", "Previsualización" ] },
-  { title: "Pack de muestra", category: "Packs DTF", formats: ["PNG", "PDF"], technicalLabels: ["Contenido demo", "Formatos visibles" ] },
-  { title: "Archivo vectorial de demostración", category: "Corte láser", formats: ["SVG", "DXF", "AI"], technicalLabels: ["Piezas: demo", "Medidas: pendientes" ] },
-  { title: "Separación de ejemplo", category: "Semitonos", formats: ["PSD", "PDF"], technicalLabels: ["Canales: demo", "Editable: pendiente" ] },
-] as const;
-
-const orderStates = ["PENDING_PAYMENT", "PAYMENT_REVIEW", "PAID", "CANCELLED", "REFUNDED"] as const;
-
 function DigitalPreview({ className }: { className?: string }) {
   return (
     <div className={cn("relative overflow-hidden border border-line bg-[#101218]", className)}>
@@ -51,7 +41,7 @@ function DigitalPreview({ className }: { className?: string }) {
         <div className="h-1.5 w-1/2 bg-white/10" />
       </div>
       <span className="absolute bottom-4 left-4 text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-ink-muted">Preview de recurso digital</span>
-      <span className="absolute bottom-4 right-4 rounded-md border border-white/10 bg-bg/80 px-2 py-1 text-[0.55rem] font-semibold uppercase tracking-[0.14em] text-ink-soft">Demo</span>
+      <span className="absolute bottom-4 right-4 rounded-md border border-white/10 bg-bg/80 px-2 py-1 text-[0.55rem] font-semibold uppercase tracking-[0.14em] text-ink-soft">Vista previa</span>
     </div>
   );
 }
@@ -112,9 +102,9 @@ function ResourceGrid({ catalog }: { catalog: PublicDigitalCatalog }) {
   return (
     <section id="recursos" className="scroll-mt-20 border-y border-line bg-bg-soft py-20 md:py-28">
       <Container>
-        <SectionHeader eyebrow="Selección visual" title="Recursos destacados" description={catalog.products.length > 0 ? "Recursos publicados disponibles para compra segura." : "Mientras llega el catálogo, esta selección editorial presenta los flujos disponibles."} />
+        <SectionHeader eyebrow="Selección visual" title="Recursos destacados" description={catalog.products.length > 0 ? "Recursos publicados disponibles para compra segura." : "Todavía no hay recursos publicados en esta selección."} />
         <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {catalog.products.length > 0 ? catalog.products.map((product) => <DigitalResourceCard key={product.id} title={product.name} category={product.categoryName} technicalLabels={product.specifications.slice(0, 2).map((specification) => `${specification.label}: ${specification.value}`)} href={`/descargas/${product.slug}`} previewUrl={product.primaryImageUrl} priceCents={product.priceCents} />) : demoResources.map((resource) => <DigitalResourceCard key={resource.title} {...resource} />)}
+          {catalog.products.length > 0 ? catalog.products.map((product) => <DigitalResourceCard key={product.id} title={product.name} category={product.categoryName} technicalLabels={product.specifications.slice(0, 2).map((specification) => `${specification.label}: ${specification.value}`)} href={`/descargas/${product.slug}`} previewUrl={product.primaryImageUrl} priceCents={product.priceCents} />) : <div className="border border-line bg-surface p-6 text-sm leading-relaxed text-ink-muted md:col-span-2 xl:col-span-4">Los recursos publicados aparecerán aquí con su vista previa, información técnica y opciones de compra.</div>}
         </div>
       </Container>
     </section>
@@ -125,45 +115,40 @@ function DetailAndPaymentPreview() {
   return (
     <section className="py-20 md:py-28">
       <Container>
-        <SectionHeader eyebrow="Interfaz preparada" title="Detalle y compra de recurso" description="Un ejemplo visual de cómo se presentará la información antes de habilitar compras reales." />
+        <SectionHeader eyebrow="Compra segura" title="Información clara antes de comprar" description="Cada recurso publicado presenta su información técnica, precio y proceso de compra antes de confirmar el pedido." />
         <div className="mt-10 grid overflow-hidden rounded-3xl border border-line lg:grid-cols-[1.1fr_0.9fr]">
           <DigitalPreview className="min-h-80 lg:min-h-full" />
           <div className="bg-surface p-6 md:p-8">
-            <span className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-brand">Detalle DEMO</span>
-            <h2 className="mt-3 text-3xl font-bold">Archivo vectorial de demostración</h2>
-            <p className="mt-4 leading-relaxed text-ink-muted">Aquí se mostrará la descripción, formatos incluidos, resolución, contenido, instrucciones y datos técnicos confirmados de cada recurso.</p>
+            <span className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-brand">Detalle de recurso</span>
+            <h2 className="mt-3 text-3xl font-bold">Datos confirmados para cada archivo</h2>
+            <p className="mt-4 leading-relaxed text-ink-muted">Consultá la descripción, formatos incluidos, resolución, contenido e información técnica publicados para cada recurso.</p>
             <div className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line text-sm">
-              {["Formatos incluidos", "Resolución", "Editable", "Contenido incluido"].map((item) => <div key={item} className="bg-bg-soft p-3 text-ink-muted">{item}<p className="mt-1 text-xs text-ink-faint">Dato futuro</p></div>)}
+              {["Formatos incluidos", "Resolución", "Editable", "Contenido incluido"].map((item) => <div key={item} className="bg-bg-soft p-3 text-ink-muted">{item}<p className="mt-1 text-xs text-ink-faint">Ver detalle del recurso</p></div>)}
             </div>
-            <div className="mt-6 flex items-center justify-between border-t border-line pt-5"><div><p className="text-2xl font-semibold">$0.00</p><p className="text-[0.6rem] font-semibold uppercase tracking-[0.14em] text-ink-faint">Precio DEMO</p></div><button type="button" disabled className="inline-flex items-center gap-2 rounded-full bg-brand px-5 py-3 text-sm font-semibold text-white opacity-60 disabled:cursor-not-allowed">Comprar archivo <ArrowRight className="h-4 w-4" /></button></div>
+            <a href="#recursos" className={cn(buttonVariants({ size: "lg" }), "mt-6")}>Explorar recursos <ArrowRight className="h-4 w-4" /></a>
           </div>
         </div>
 
         <div className="mt-12 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
           <div className="rounded-2xl border border-line bg-surface p-6 md:p-8">
-            <div className="flex items-center justify-between gap-4"><div><p className="eyebrow">Checkout DEMO</p><h2 className="mt-3 text-2xl font-bold">Elegí cómo pagar</h2></div><span className="rounded-full border border-brand/30 bg-brand-soft px-3 py-1 text-[0.6rem] font-semibold uppercase tracking-[0.14em] text-brand">Próximamente</span></div>
-            <div className="mt-7 grid gap-3 sm:grid-cols-2">
-              <div className="border border-brand/50 bg-brand-soft p-5"><Building2 className="h-5 w-5 text-brand" /><h3 className="mt-5 font-semibold">Transferencia bancaria</h3><p className="mt-2 text-sm text-ink-muted">Interfaz preparada para una orden pendiente de confirmación.</p></div>
-              <div className="border border-line bg-bg-soft p-5 opacity-70"><WalletCards className="h-5 w-5 text-ink-muted" /><h3 className="mt-5 font-semibold">PayPal</h3><p className="mt-2 text-sm text-ink-muted">PayPal estará disponible próximamente.</p></div>
-            </div>
-            <div className="mt-4 grid gap-3 border-t border-line pt-4 sm:grid-cols-3">
-              {["Banco", "Titular", "Cuenta"].map((item) => <div key={item} className="rounded-lg border border-line bg-bg-soft p-3 text-xs text-ink-faint">{item}<p className="mt-1 text-sm text-ink-muted">Información futura</p></div>)}
+            <div><p className="eyebrow">Checkout</p><h2 className="mt-3 text-2xl font-bold">Elegí cómo pagar</h2><p className="mt-3 text-sm leading-relaxed text-ink-muted">Las opciones disponibles se muestran durante el checkout según la configuración segura del servicio.</p></div>
+            <div className="mt-7 max-w-md">
+              <div className="border border-brand/50 bg-brand-soft p-5"><Building2 className="h-5 w-5 text-brand" /><h3 className="mt-5 font-semibold">Transferencia bancaria</h3><p className="mt-2 text-sm text-ink-muted">Creá tu pedido y contactanos por WhatsApp con tu código para confirmar el pago.</p></div>
             </div>
           </div>
-          <div className="rounded-2xl border border-line bg-bg-soft p-6 md:p-8"><LockKeyhole className="h-5 w-5 text-brand" /><h2 className="mt-5 text-2xl font-bold">Acceso protegido</h2><p className="mt-3 text-sm leading-relaxed text-ink-muted">El frontend no decide si un pago fue confirmado. La descarga se habilitará únicamente tras una autorización futura del servidor.</p><p className="mt-6 flex items-center gap-2 text-sm text-ink-faint"><LockKeyhole className="h-4 w-4" /> Disponible después del pago</p></div>
+          <div className="rounded-2xl border border-line bg-bg-soft p-6 md:p-8"><LockKeyhole className="h-5 w-5 text-brand" /><h2 className="mt-5 text-2xl font-bold">Acceso protegido</h2><p className="mt-3 text-sm leading-relaxed text-ink-muted">El servidor verifica el estado del pago antes de habilitar el acceso a cada archivo.</p><p className="mt-6 flex items-center gap-2 text-sm text-ink-faint"><LockKeyhole className="h-4 w-4" /> Disponible después del pago confirmado</p></div>
         </div>
       </Container>
     </section>
   );
 }
 
-function FutureFlow() {
+function PurchaseFlow() {
   return (
     <section id="como-funciona" className="scroll-mt-20 border-y border-line bg-bg-soft py-20 md:py-28">
       <Container>
-        <SectionHeader eyebrow="Próximamente" title="¿Cómo funcionarán las descargas?" description="El flujo estará disponible cuando los pagos y la autorización segura estén activos." />
+        <SectionHeader eyebrow="Proceso de compra" title="¿Cómo funcionan las descargas?" description="Completá el pago y, una vez confirmado, accedé a tus archivos desde el pedido." />
         <ol className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[["01", "Elegís tu recurso"], ["02", "Seleccionás tu método de pago"], ["03", "Confirmamos el pago"], ["04", "Desbloqueamos tu descarga"]].map(([number, text]) => <li key={number} className="border border-line bg-surface p-5"><span className="text-xs font-semibold tracking-[0.16em] text-brand">{number}</span><p className="mt-8 text-lg font-semibold">{text}</p></li>)}</ol>
-        <div className="mt-10 flex flex-wrap gap-2">{orderStates.map((state) => <span key={state} className="rounded-full border border-line bg-surface px-3 py-1.5 text-[0.6rem] font-semibold tracking-[0.1em] text-ink-muted">{state}</span>)}</div>
       </Container>
     </section>
   );
@@ -173,11 +158,11 @@ function TrustFormatsAndCta() {
   return (
     <>
       <section className="py-20 md:py-28"><Container><div className="grid gap-10 lg:grid-cols-2"><div><p className="eyebrow">Confianza</p><h2 className="mt-4 text-3xl font-bold md:text-4xl">Archivos preparados para producción</h2><div className="mt-7 grid gap-3 sm:grid-cols-2">{[[CheckCircle2, "Previews claras"], [FileText, "Información técnica"], [PackageCheck, "Archivos organizados"], [ShieldCheck, "Acceso protegido"]].map(([Icon, text]) => { const ItemIcon = Icon as LucideIcon; return <div key={text as string} className="flex items-center gap-3 border-b border-line py-3 text-sm text-ink-soft"><ItemIcon className="h-4 w-4 text-brand" />{text as string}</div>; })}</div></div><div className="rounded-2xl border border-line bg-surface p-6 md:p-8"><p className="eyebrow">Formatos</p><h2 className="mt-4 text-2xl font-bold">Información clara antes de comprar</h2><p className="mt-3 text-ink-muted">Cada recurso indicará claramente los formatos incluidos antes de la compra.</p><div className="mt-7 flex flex-wrap gap-2">{["PSD", "PNG", "AI", "PDF", "SVG", "DXF"].map((format) => <span key={format} className="rounded-md border border-line bg-bg-soft px-3 py-2 text-xs font-semibold tracking-[0.12em] text-ink-soft">{format}</span>)}</div></div></div></Container></section>
-      <section className="pb-20 md:pb-28"><Container><div className="relative overflow-hidden rounded-3xl border border-line-strong bg-surface px-6 py-14 text-center md:px-12 md:py-16"><div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(229,9,20,0.16),transparent_40%)]" /><div className="relative mx-auto max-w-2xl"><p className="eyebrow text-brand">Recursos digitales CYMT</p><h2 className="mt-4 text-balance text-3xl font-bold md:text-5xl">¿Trabajás con serigrafía, DTF o fabricación digital?</h2><p className="mt-4 text-ink-muted md:text-lg">Estamos preparando recursos digitales pensados para agilizar tu producción y tus proyectos.</p><a href="#recursos" className={cn(buttonVariants({ size: "lg" }), "mt-8")}>Explorar recursos <ArrowRight className="h-4 w-4" /></a></div></div></Container></section>
+      <section className="pb-20 md:pb-28"><Container><div className="relative overflow-hidden rounded-3xl border border-line-strong bg-surface px-6 py-14 text-center md:px-12 md:py-16"><div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(229,9,20,0.16),transparent_40%)]" /><div className="relative mx-auto max-w-2xl"><p className="eyebrow text-brand">Recursos digitales CYMT</p><h2 className="mt-4 text-balance text-3xl font-bold md:text-5xl">¿Trabajás con serigrafía, DTF o fabricación digital?</h2><p className="mt-4 text-ink-muted md:text-lg">Explorá recursos digitales publicados para agilizar tu producción y tus proyectos.</p><a href="#recursos" className={cn(buttonVariants({ size: "lg" }), "mt-8")}>Explorar recursos <ArrowRight className="h-4 w-4" /></a></div></div></Container></section>
     </>
   );
 }
 
 export function DownloadsLanding({ catalog }: { catalog: PublicDigitalCatalog }) {
-  return <><Hero /><Categories catalog={catalog} /><ResourceGrid catalog={catalog} /><DetailAndPaymentPreview /><FutureFlow /><TrustFormatsAndCta /></>;
+  return <><Hero /><Categories catalog={catalog} /><ResourceGrid catalog={catalog} /><DetailAndPaymentPreview /><PurchaseFlow /><TrustFormatsAndCta /></>;
 }

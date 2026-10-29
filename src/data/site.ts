@@ -13,7 +13,7 @@ export const site = {
   tagline: "Streetwear Unicos",
   description:
     "CYMT STORE — Streetwear premium. Drops exclusivos de Anime, Rock, Naturaleza, Retro y Mas.",
-  url: "https://cymtstore.com",
+  url: "https://cymt-store.vercel.app",
   locale: "es-SV",
   country: "El Salvador",
   city: "San Salvador",
