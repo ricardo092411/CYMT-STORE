@@ -89,7 +89,12 @@ export async function createSignedInkImageUpload(input: unknown): Promise<Signed
 /** Deletes only exact, validated CMT Ink keys after their DB rows were removed. */
 export async function removeInkImageObjects(storagePaths: string[]): Promise<void> {
   const exactPaths = storagePaths.filter(
-    (storagePath) => storagePath.startsWith(STORAGE_PREFIX) && storagePath.length > STORAGE_PREFIX.length && !storagePath.includes("..") && !storagePath.includes("\\"),
+    (storagePath) =>
+      storagePath.startsWith(STORAGE_PREFIX) &&
+      storagePath.length > STORAGE_PREFIX.length &&
+      !storagePath.slice(STORAGE_PREFIX.length).includes("/") &&
+      !storagePath.includes("..") &&
+      !storagePath.includes("\\"),
   );
   if (exactPaths.length === 0) return;
   const { error } = await getAdminStorageClient().storage.from(PRODUCT_IMAGES_BUCKET).remove(exactPaths);

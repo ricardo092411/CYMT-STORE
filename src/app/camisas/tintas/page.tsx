@@ -1,5 +1,8 @@
 import { CmtInkLanding } from "@/components/inks/cmt-ink-landing";
+import { getPublicInkLandingSettings } from "@/lib/public-inks";
 
-export default function CamisasTintasPage() {
-  return <CmtInkLanding />;
+export const dynamic = "force-dynamic";
+
+export default async function CamisasTintasPage() {
+  return <CmtInkLanding catalog={{ products: [], landingSettings: await getPublicInkLandingSettings() }} />;
 }

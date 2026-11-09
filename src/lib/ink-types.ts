@@ -13,6 +13,26 @@ export type InkProductImage = {
   createdAt: string;
 };
 
+export type InkMediaType = "image" | "video";
+
+export type InkProductMedia = {
+  id: number;
+  productId: number;
+  mediaType: InkMediaType;
+  storagePath: string;
+  title: string | null;
+  caption: string | null;
+  altText: string | null;
+  sortOrder: number;
+  createdAt: string;
+};
+
+export type InkLandingSettings = {
+  heroStoragePath: string | null;
+  heroAltText: string | null;
+  updatedAt: string | null;
+};
+
 export type InkProduct = {
   id: number;
   name: string;
@@ -26,6 +46,7 @@ export type InkProduct = {
   createdAt: string;
   updatedAt: string;
   images: InkProductImage[];
+  showcaseMedia: InkProductMedia[];
 };
 
 export type InkMetrics = {
@@ -51,4 +72,19 @@ export type InkImagePayload = {
   altText: string | null;
   sortOrder: number;
   isPrimary: boolean;
+};
+
+export type InkProductMediaPayload = {
+  id?: number;
+  mediaType: InkMediaType;
+  storagePath: string;
+  title: string | null;
+  caption: string | null;
+  altText: string | null;
+  sortOrder: number;
+};
+
+export type InkLandingSettingsPayload = {
+  heroStoragePath: string | null;
+  heroAltText: string | null;
 };

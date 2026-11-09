@@ -251,6 +251,41 @@ export const inkProductImages = pgTable(
   ],
 );
 
+/** Singleton public Hero media for the CMT Ink landing. */
+export const inkLandingSettings = pgTable(
+  "ink_landing_settings",
+  {
+    id: integer("id").primaryKey(),
+    heroStoragePath: text("hero_storage_path"),
+    heroAltText: varchar("hero_alt_text", { length: 300 }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [check("ink_landing_settings_singleton_id_check", sql`${table.id} = 1`)],
+);
+
+/** Public visual examples of finished applications, separate from product packshots. */
+export const inkProductMedia = pgTable(
+  "ink_product_media",
+  {
+    id: serial("id").primaryKey(),
+    productId: integer("product_id")
+      .notNull()
+      .references(() => inkProducts.id, { onDelete: "cascade" }),
+    mediaType: varchar("media_type", { length: 16 }).notNull(),
+    storagePath: text("storage_path").notNull(),
+    title: varchar("title", { length: 160 }),
+    caption: varchar("caption", { length: 500 }),
+    altText: varchar("alt_text", { length: 300 }),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("ink_product_media_product_id_idx").on(table.productId),
+    uniqueIndex("ink_product_media_product_sort_order_unique").on(table.productId, table.sortOrder),
+    check("ink_product_media_type_check", sql`${table.mediaType} in ('image', 'video')`),
+  ],
+);
+
 /* ------------------------ Confection CMS ------------------------ */
 
 export type ConfectionSpecification = {

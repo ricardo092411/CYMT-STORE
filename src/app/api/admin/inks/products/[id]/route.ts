@@ -10,6 +10,7 @@ import {
   updateInkProduct,
 } from "@/lib/admin-inks";
 import { removeInkImageObjects } from "@/lib/ink-image-storage";
+import { removeInkShowcaseObjects } from "@/lib/ink-media-storage";
 
 export const runtime = "nodejs";
 
@@ -38,9 +39,12 @@ export async function DELETE(_: Request, { params }: RouteContext) {
     const { id } = await params;
     const storagePaths = await deleteInkProduct(parseRouteId(id));
     try {
-      await removeInkImageObjects(storagePaths);
+      await Promise.all([
+        removeInkImageObjects(storagePaths.imageStoragePaths),
+        removeInkShowcaseObjects(storagePaths.showcaseStoragePaths),
+      ]);
     } catch (error) {
-      console.error("[ink-product] orphan image cleanup failed", error);
+      console.error("[ink-product] orphan media cleanup failed", error);
     }
     return new NextResponse(null, { status: 204 });
   } catch (error) {

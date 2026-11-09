@@ -2,12 +2,21 @@ import "server-only";
 
 import { asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { inkProductImages, inkProducts } from "@/db/schema";
+import {
+  inkLandingSettings,
+  inkProductImages,
+  inkProductMedia,
+  inkProducts,
+} from "@/db/schema";
 import type {
   InkImagePayload,
+  InkLandingSettings,
+  InkLandingSettingsPayload,
   InkMetrics,
   InkProduct,
   InkProductImage,
+  InkProductMedia,
+  InkProductMediaPayload,
   InkProductPayload,
   InkSpecification,
 } from "@/lib/ink-types";
@@ -17,6 +26,11 @@ export class InkNotFoundError extends Error {}
 export class InkSlugConflictError extends Error {}
 
 type StoredInkImage = typeof inkProductImages.$inferSelect;
+type StoredInkMedia = typeof inkProductMedia.$inferSelect;
+
+const INK_PRODUCT_PREFIX = "cmt-ink/";
+const INK_LANDING_PREFIX = "cmt-ink/landing/";
+const INK_SHOWCASE_PREFIX = "cmt-ink/showcase/";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -48,7 +62,39 @@ function validSlug(value: unknown): value is string {
 }
 
 function isInkStoragePath(value: unknown): value is string {
-  return typeof value === "string" && value.length > "cmt-ink/".length && value.length <= 500 && value.startsWith("cmt-ink/") && !value.includes("..") && !value.includes("\\");
+  return (
+    typeof value === "string" &&
+    value.length > INK_PRODUCT_PREFIX.length &&
+    value.length <= 500 &&
+    value.startsWith(INK_PRODUCT_PREFIX) &&
+    !value.slice(INK_PRODUCT_PREFIX.length).includes("/") &&
+    !value.includes("..") &&
+    !value.includes("\\")
+  );
+}
+
+function isInkLandingStoragePath(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > INK_LANDING_PREFIX.length &&
+    value.length <= 500 &&
+    value.startsWith(INK_LANDING_PREFIX) &&
+    !value.slice(INK_LANDING_PREFIX.length).includes("/") &&
+    !value.includes("..") &&
+    !value.includes("\\")
+  );
+}
+
+function isInkShowcaseStoragePath(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > INK_SHOWCASE_PREFIX.length &&
+    value.length <= 500 &&
+    value.startsWith(INK_SHOWCASE_PREFIX) &&
+    !value.slice(INK_SHOWCASE_PREFIX.length).includes("/") &&
+    !value.includes("..") &&
+    !value.includes("\\")
+  );
 }
 
 function isUniqueViolation(error: unknown): boolean {
@@ -74,7 +120,35 @@ function serializeImage(image: StoredInkImage): InkProductImage {
   };
 }
 
-function mapProduct(product: typeof inkProducts.$inferSelect, images: StoredInkImage[]): InkProduct {
+function serializeMedia(media: StoredInkMedia): InkProductMedia {
+  return {
+    id: media.id,
+    productId: media.productId,
+    mediaType: media.mediaType === "video" ? "video" : "image",
+    storagePath: media.storagePath,
+    title: media.title,
+    caption: media.caption,
+    altText: media.altText,
+    sortOrder: media.sortOrder,
+    createdAt: media.createdAt.toISOString(),
+  };
+}
+
+function serializeLandingSettings(
+  settings: typeof inkLandingSettings.$inferSelect | undefined,
+): InkLandingSettings {
+  return {
+    heroStoragePath: settings?.heroStoragePath ?? null,
+    heroAltText: settings?.heroAltText ?? null,
+    updatedAt: settings?.updatedAt.toISOString() ?? null,
+  };
+}
+
+function mapProduct(
+  product: typeof inkProducts.$inferSelect,
+  images: StoredInkImage[],
+  showcaseMedia: StoredInkMedia[],
+): InkProduct {
   return {
     id: product.id,
     name: product.name,
@@ -88,6 +162,9 @@ function mapProduct(product: typeof inkProducts.$inferSelect, images: StoredInkI
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),
     images: images.sort((left, right) => left.sortOrder - right.sortOrder).map(serializeImage),
+    showcaseMedia: showcaseMedia
+      .sort((left, right) => left.sortOrder - right.sortOrder)
+      .map(serializeMedia),
   };
 }
 
@@ -133,17 +210,82 @@ export function parseInkImagePayloads(input: unknown): InkImagePayload[] {
   return images;
 }
 
+export function parseInkLandingSettingsPayload(input: unknown): InkLandingSettingsPayload {
+  if (!isRecord(input)) throw new InkValidationError("Datos de portada inválidos");
+  const heroStoragePath = input.heroStoragePath;
+  const heroAltText = nullableText(input.heroAltText, 300);
+  if (
+    (heroStoragePath !== null && !isInkLandingStoragePath(heroStoragePath)) ||
+    heroAltText === undefined
+  ) {
+    throw new InkValidationError("Datos de portada inválidos");
+  }
+  return { heroStoragePath, heroAltText };
+}
+
+export function parseInkProductMediaPayloads(input: unknown): InkProductMediaPayload[] {
+  if (!isRecord(input) || !Array.isArray(input.media) || input.media.length > 40) {
+    throw new InkValidationError("Las muestras no son válidas");
+  }
+  const media = input.media.map((item): InkProductMediaPayload => {
+    if (!isRecord(item)) throw new InkValidationError("Las muestras no son válidas");
+    const id = item.id === undefined ? undefined : positiveId(item.id);
+    const title = nullableText(item.title, 160);
+    const caption = nullableText(item.caption, 500);
+    const altText = nullableText(item.altText, 300);
+    if (
+      id === null ||
+      (item.mediaType !== "image" && item.mediaType !== "video") ||
+      !isInkShowcaseStoragePath(item.storagePath) ||
+      title === undefined ||
+      caption === undefined ||
+      altText === undefined ||
+      !nonNegativeInteger(item.sortOrder)
+    ) {
+      throw new InkValidationError("Las muestras no son válidas");
+    }
+    return {
+      ...(id === undefined ? {} : { id }),
+      mediaType: item.mediaType,
+      storagePath: item.storagePath,
+      title,
+      caption,
+      altText,
+      sortOrder: item.sortOrder,
+    };
+  });
+  const paths = media.map((item) => item.storagePath);
+  const positions = media.map((item) => item.sortOrder);
+  if (new Set(paths).size !== paths.length || new Set(positions).size !== positions.length) {
+    throw new InkValidationError("Las muestras no son válidas");
+  }
+  return media;
+}
+
 export async function listInkProducts(): Promise<InkProduct[]> {
   const products = await db.select().from(inkProducts).orderBy(asc(inkProducts.sortOrder), asc(inkProducts.name));
   const productIds = products.map((product) => product.id);
-  const images = productIds.length === 0 ? [] : await db.select().from(inkProductImages).where(inArray(inkProductImages.productId, productIds)).orderBy(asc(inkProductImages.sortOrder));
+  const [images, showcaseMedia] = productIds.length === 0
+    ? [[], []]
+    : await Promise.all([
+        db.select().from(inkProductImages).where(inArray(inkProductImages.productId, productIds)).orderBy(asc(inkProductImages.sortOrder)),
+        db.select().from(inkProductMedia).where(inArray(inkProductMedia.productId, productIds)).orderBy(asc(inkProductMedia.sortOrder)),
+      ]);
   const imagesByProduct = new Map<number, StoredInkImage[]>();
   for (const image of images) {
     const current = imagesByProduct.get(image.productId) ?? [];
     current.push(image);
     imagesByProduct.set(image.productId, current);
   }
-  return products.map((product) => mapProduct(product, imagesByProduct.get(product.id) ?? []));
+  const showcaseByProduct = new Map<number, StoredInkMedia[]>();
+  for (const media of showcaseMedia) {
+    const current = showcaseByProduct.get(media.productId) ?? [];
+    current.push(media);
+    showcaseByProduct.set(media.productId, current);
+  }
+  return products.map((product) =>
+    mapProduct(product, imagesByProduct.get(product.id) ?? [], showcaseByProduct.get(product.id) ?? []),
+  );
 }
 
 export async function getInkMetrics(): Promise<InkMetrics> {
@@ -156,6 +298,43 @@ export async function getInkMetrics(): Promise<InkMetrics> {
   return { productCount, publishedCount, draftCount: productCount - publishedCount };
 }
 
+export async function getInkLandingSettings(): Promise<InkLandingSettings> {
+  const [settings] = await db
+    .select()
+    .from(inkLandingSettings)
+    .where(eq(inkLandingSettings.id, 1))
+    .limit(1);
+  return serializeLandingSettings(settings);
+}
+
+export async function updateInkLandingSettings(
+  values: InkLandingSettingsPayload,
+): Promise<{ settings: InkLandingSettings; removedStoragePaths: string[] }> {
+  return db.transaction(async (tx) => {
+    const [current] = await tx
+      .select()
+      .from(inkLandingSettings)
+      .where(eq(inkLandingSettings.id, 1))
+      .limit(1);
+    const [settings] = await tx
+      .insert(inkLandingSettings)
+      .values({ id: 1, ...values, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: inkLandingSettings.id,
+        set: { ...values, updatedAt: new Date() },
+      })
+      .returning();
+    if (!settings) throw new Error("CMT Ink landing settings were not updated");
+    return {
+      settings: serializeLandingSettings(settings),
+      removedStoragePaths:
+        current?.heroStoragePath && current.heroStoragePath !== values.heroStoragePath
+          ? [current.heroStoragePath]
+          : [],
+    };
+  });
+}
+
 async function getProductOrThrow(id: number): Promise<typeof inkProducts.$inferSelect> {
   const [product] = await db.select().from(inkProducts).where(eq(inkProducts.id, id)).limit(1);
   if (!product) throw new InkNotFoundError("Producto CMT Ink no encontrado");
@@ -164,8 +343,11 @@ async function getProductOrThrow(id: number): Promise<typeof inkProducts.$inferS
 
 async function resolveProduct(id: number): Promise<InkProduct> {
   const product = await getProductOrThrow(id);
-  const images = await db.select().from(inkProductImages).where(eq(inkProductImages.productId, id)).orderBy(asc(inkProductImages.sortOrder));
-  return mapProduct(product, images);
+  const [images, showcaseMedia] = await Promise.all([
+    db.select().from(inkProductImages).where(eq(inkProductImages.productId, id)).orderBy(asc(inkProductImages.sortOrder)),
+    db.select().from(inkProductMedia).where(eq(inkProductMedia.productId, id)).orderBy(asc(inkProductMedia.sortOrder)),
+  ]);
+  return mapProduct(product, images, showcaseMedia);
 }
 
 export async function createInkProduct(values: InkProductPayload): Promise<InkProduct> {
@@ -190,13 +372,19 @@ export async function updateInkProduct(id: number, values: InkProductPayload): P
   }
 }
 
-export async function deleteInkProduct(id: number): Promise<string[]> {
+export async function deleteInkProduct(
+  id: number,
+): Promise<{ imageStoragePaths: string[]; showcaseStoragePaths: string[] }> {
   return db.transaction(async (tx) => {
     const [product] = await tx.select({ id: inkProducts.id }).from(inkProducts).where(eq(inkProducts.id, id)).limit(1);
     if (!product) throw new InkNotFoundError("Producto CMT Ink no encontrado");
     const images = await tx.select({ storagePath: inkProductImages.storagePath }).from(inkProductImages).where(eq(inkProductImages.productId, id));
+    const showcaseMedia = await tx.select({ storagePath: inkProductMedia.storagePath }).from(inkProductMedia).where(eq(inkProductMedia.productId, id));
     await tx.delete(inkProducts).where(eq(inkProducts.id, id));
-    return images.map((image) => image.storagePath);
+    return {
+      imageStoragePaths: images.map((image) => image.storagePath),
+      showcaseStoragePaths: showcaseMedia.map((media) => media.storagePath),
+    };
   });
 }
 
@@ -209,6 +397,31 @@ export async function replaceInkProductImages(id: number, images: InkImagePayloa
     await tx.delete(inkProductImages).where(eq(inkProductImages.productId, id));
     if (images.length > 0) await tx.insert(inkProductImages).values(images.map((image) => ({ productId: id, storagePath: image.storagePath, altText: image.altText, sortOrder: image.sortOrder, isPrimary: image.isPrimary })));
     return current.filter((image) => !nextPaths.has(image.storagePath)).map((image) => image.storagePath);
+  });
+  return { product: await resolveProduct(id), removedStoragePaths };
+}
+
+export async function replaceInkProductMedia(id: number, media: InkProductMediaPayload[]) {
+  const removedStoragePaths = await db.transaction(async (tx) => {
+    const [product] = await tx.select({ id: inkProducts.id }).from(inkProducts).where(eq(inkProducts.id, id)).limit(1);
+    if (!product) throw new InkNotFoundError("Producto CMT Ink no encontrado");
+    const current = await tx.select().from(inkProductMedia).where(eq(inkProductMedia.productId, id));
+    const nextPaths = new Set(media.map((item) => item.storagePath));
+    await tx.delete(inkProductMedia).where(eq(inkProductMedia.productId, id));
+    if (media.length > 0) {
+      await tx.insert(inkProductMedia).values(
+        media.map((item) => ({
+          productId: id,
+          mediaType: item.mediaType,
+          storagePath: item.storagePath,
+          title: item.title,
+          caption: item.caption,
+          altText: item.altText,
+          sortOrder: item.sortOrder,
+        })),
+      );
+    }
+    return current.filter((item) => !nextPaths.has(item.storagePath)).map((item) => item.storagePath);
   });
   return { product: await resolveProduct(id), removedStoragePaths };
 }

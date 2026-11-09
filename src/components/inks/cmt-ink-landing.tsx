@@ -16,7 +16,11 @@ import {
 } from "lucide-react";
 import { Container, SectionHeader, buttonVariants } from "@/components/ui";
 import { site } from "@/data/site";
-import type { PublicInkCatalog, PublicInkProduct } from "@/lib/public-inks";
+import type {
+  PublicInkCatalog,
+  PublicInkLandingSettings,
+  PublicInkProduct,
+} from "@/lib/public-inks";
 import { cn } from "@/lib/utils";
 
 const heroBenefits: { icon: LucideIcon; title: string; description: string }[] = [
@@ -82,7 +86,7 @@ function GlowProductVisual({ product }: { product: PublicInkProduct }) {
   );
 }
 
-function InkHero() {
+function InkHero({ landingSettings }: { landingSettings: PublicInkLandingSettings }) {
   return (
     <section className="relative overflow-hidden border-b border-line bg-bg-soft">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_28%,rgba(184,243,107,0.1),transparent_25%)]" />
@@ -111,10 +115,20 @@ function InkHero() {
           </div>
         </div>
         <div className="relative mx-auto w-full max-w-xl lg:max-w-none">
-          <GlowMediaPlaceholder
-            label="Imagen pendiente de envases y muestras CMT Ink"
-            className="aspect-[5/4] rounded-2xl shadow-[0_30px_90px_-40px_rgba(0,0,0,0.9)]"
-          />
+          {landingSettings.heroImageUrl ? (
+            <div className="aspect-[5/4] overflow-hidden rounded-2xl border border-white/10 bg-[#111412] shadow-[0_30px_90px_-40px_rgba(0,0,0,0.9)]">
+              <img
+                src={landingSettings.heroImageUrl}
+                alt={landingSettings.heroAltText ?? "CMT Ink Glow in the Dark"}
+                className="h-full w-full object-contain"
+              />
+            </div>
+          ) : (
+            <GlowMediaPlaceholder
+              label="Imagen pendiente de envases y muestras CMT Ink"
+              className="aspect-[5/4] rounded-2xl shadow-[0_30px_90px_-40px_rgba(0,0,0,0.9)]"
+            />
+          )}
           <div className="absolute -bottom-4 -left-3 border border-white/15 bg-surface px-4 py-3 shadow-xl sm:-left-5">
             <p className="text-[0.6rem] font-semibold uppercase tracking-[0.2em] text-ink-faint">Línea actual</p>
             <p className="mt-1 font-display text-lg font-semibold text-[#b8f36b]">Glow in the Dark</p>
@@ -323,10 +337,15 @@ function MachineryCrossSell() {
   );
 }
 
-export function CmtInkLanding({ catalog = { products: [] } }: { catalog?: PublicInkCatalog }) {
+const EMPTY_CATALOG: PublicInkCatalog = {
+  products: [],
+  landingSettings: { heroImageUrl: null, heroAltText: null },
+};
+
+export function CmtInkLanding({ catalog = EMPTY_CATALOG }: { catalog?: PublicInkCatalog }) {
   return (
     <>
-      <InkHero />
+      <InkHero landingSettings={catalog.landingSettings} />
       <Benefits />
       <GlowLine products={catalog.products} />
       <HowItWorks />
